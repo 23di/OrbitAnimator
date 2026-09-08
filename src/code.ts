@@ -220,7 +220,10 @@ function floatTrack(
     baseValue: { type: "FLOAT", value: baseValue },
     keyframes: frames.map((frame, index) => ({
       timelinePosition: frame.time,
-      easing: index === frames.length - 1 ? { type: "HOLD" } : easing,
+      // Figma stores interpolation on the destination keyframe. The first
+      // key has no incoming segment; putting HOLD on the closing key freezes
+      // the final leg and causes a visible jump when the loop restarts.
+      easing: index === 0 ? { type: "HOLD" } : easing,
       value: { type: "FLOAT", value: value(frame) },
     })),
   };

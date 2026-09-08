@@ -210,7 +210,18 @@ assert.equal(
   "Refreshed back-copy tracks must end at the new duration",
 );
 for (const node of [source, refreshedBack]) {
-  const easing = node.manualKeyframeTracks.TRANSLATION_X.keyframes[0].easing;
+  const keyframes = node.manualKeyframeTracks.TRANSLATION_X.keyframes;
+  assert.equal(
+    keyframes[0].easing.type,
+    "HOLD",
+    "Only the first key may use HOLD because it has no incoming segment",
+  );
+  assert.notEqual(
+    keyframes.at(-1).easing.type,
+    "HOLD",
+    "The closing key must interpolate the final leg instead of jumping at loop end",
+  );
+  const easing = keyframes[1].easing;
   assert.equal(easing.type, "CUSTOM_CUBIC_BEZIER", "Selected easing must be written to every track");
   assert.deepEqual(
     easing.easingFunctionCubicBezier,
@@ -249,7 +260,7 @@ for (const timing of timingCases) {
       "Front and back tracks must end at every selected duration",
     );
     assert.deepEqual(
-      track.keyframes[0].easing.easingFunctionCubicBezier,
+      track.keyframes[1].easing.easingFunctionCubicBezier,
       { x1: timing.ease[0], y1: timing.ease[1], x2: timing.ease[2], y2: timing.ease[3] },
       "Every built-in easing must be written to front and back tracks",
     );
