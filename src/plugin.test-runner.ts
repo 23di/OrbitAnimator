@@ -41,6 +41,7 @@ function makeNode(name: string): any {
     removed: false,
     timelines: [timeline],
     manualKeyframeTracks: {} as Record<string, unknown>,
+    removedTrackNames: [] as string[],
     getTopLevelFrame: () => topFrame,
     getPluginData: (key: string) => pluginData.get(key) ?? "",
     setPluginData: (key: string, value: string) => pluginData.set(key, value),
@@ -48,6 +49,7 @@ function makeNode(name: string): any {
       this.manualKeyframeTracks[field.name] = track;
     },
     removeManualKeyframeTrack(field: { name: string }) {
+      this.removedTrackNames.push(field.name);
       delete this.manualKeyframeTracks[field.name];
     },
     setTimelineDuration(id: string, duration: number) {
@@ -55,7 +57,11 @@ function makeNode(name: string): any {
       timeline.duration = duration;
     },
     clone() {
-      return makeNode(this.name);
+      const clone = makeNode(this.name);
+      clone.manualKeyframeTracks = structuredClone(this.manualKeyframeTracks);
+      const marker = this.getPluginData("orbit-motion");
+      if (marker) clone.setPluginData("orbit-motion", marker);
+      return clone;
     },
     remove() {
       this.removed = true;
@@ -179,6 +185,11 @@ proxyChildReads = false;
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 const refreshedBack = currentBack();
 assert(refreshedBack !== firstBack, "Refresh must replace the old back copy with a fresh clone");
+assert.deepEqual(
+  new Set(refreshedBack.removedTrackNames),
+  new Set(["TRANSLATION_X", "TRANSLATION_Y", "SCALE_X", "SCALE_Y", "ROTATION", "OPACITY"]),
+  "Refresh must remove every inherited front track before writing back tracks",
+);
 assert(firstBack.removed, "Refresh must remove the previous paired back copy");
 assert(staleBack.removed, "Refresh must remove stale unpaired back copies");
 assertSynchronizedPair(refreshedBack);

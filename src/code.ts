@@ -279,6 +279,14 @@ function createBackCopy(source: MotionNode): MotionNode {
   }
   clone.name = `${source.name} · Orbit Back`;
   if (hasSceneChildren(source.parent)) source.parent.insertChild(0, clone);
+  // A Figma clone inherits the source's existing manual tracks. On refresh
+  // those are front-split tracks, especially OPACITY, and must not leak into
+  // the new back layer before its complete track set is applied.
+  for (const name of animatedFields) {
+    if (clone.manualKeyframeTracks[name]) {
+      clone.removeManualKeyframeTrack({ type: "PROPERTY", name });
+    }
+  }
   clone.setPluginData(orbitMarkerKey, JSON.stringify({
     version: 2,
     preset: "",
