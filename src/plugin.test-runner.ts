@@ -4,6 +4,7 @@ import type { MotionSettings } from "./types";
 
 let nextId = 1;
 const nodes = new Map<string, any>();
+const timeline = { id: "timeline-1", duration: 5 };
 const parent = {
   type: "FRAME",
   parent: { type: "PAGE" },
@@ -29,7 +30,7 @@ function makeNode(name: string): any {
     parent,
     locked: false,
     removed: false,
-    timelines: [],
+    timelines: [timeline],
     manualKeyframeTracks: {} as Record<string, unknown>,
     getTopLevelFrame: () => topFrame,
     getPluginData: (key: string) => pluginData.get(key) ?? "",
@@ -40,7 +41,10 @@ function makeNode(name: string): any {
     removeManualKeyframeTrack(field: { name: string }) {
       delete this.manualKeyframeTracks[field.name];
     },
-    setTimelineDuration() {},
+    setTimelineDuration(id: string, duration: number) {
+      assert.equal(id, timeline.id);
+      timeline.duration = duration;
+    },
     clone() {
       return makeNode(this.name);
     },
@@ -144,9 +148,21 @@ source.setPluginData("orbit-motion", JSON.stringify({ role: "front", pairId: sta
 const staleBack = source.clone();
 staleBack.setPluginData("orbit-motion", JSON.stringify({ role: "back", sourceId: source.id }));
 parent.insertChild(0, staleBack);
+settings.motion.duration = 3;
 await onMessage({ type: "apply", settings });
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 assert(parent.children.includes(firstBack), "Refresh must reuse the existing paired back copy");
+assert.equal(timeline.duration, 3, "Refresh must shorten the Motion timeline to the new duration");
+assert.equal(
+  source.manualKeyframeTracks.TRANSLATION_X.keyframes.at(-1).timelinePosition,
+  3,
+  "Refreshed source tracks must end at the new duration",
+);
+assert.equal(
+  firstBack.manualKeyframeTracks.TRANSLATION_X.keyframes.at(-1).timelinePosition,
+  3,
+  "Refreshed back-copy tracks must end at the new duration",
+);
 
 await onMessage({ type: "clear", scope: "selection" });
 assert.equal(parent.children.length, 1, "Clear must remove every linked back copy");

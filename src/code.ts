@@ -351,14 +351,14 @@ function applyTracks(
   );
 }
 
-function extendTimelines(
+function setTimelineDurations(
   node: MotionNode,
   duration: number,
   touchedTimelines: Set<string>,
 ): void {
   for (const timeline of node.timelines) {
     if (touchedTimelines.has(timeline.id)) continue;
-    node.setTimelineDuration(timeline.id, Math.max(timeline.duration, duration));
+    node.setTimelineDuration(timeline.id, duration);
     touchedTimelines.add(timeline.id);
   }
 }
@@ -417,7 +417,7 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
           ? depthSplitOpacity(frame, "front")
           : frame.opacity,
       );
-      extendTimelines(node, settings.motion.duration, touchedTimelines);
+      setTimelineDurations(node, settings.motion.duration, touchedTimelines);
 
       if (backCopy) {
         applyTracks(
@@ -427,7 +427,7 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
           easing,
           (frame) => depthSplitOpacity(frame, "back"),
         );
-        extendTimelines(backCopy, settings.motion.duration, touchedTimelines);
+        setTimelineDurations(backCopy, settings.motion.duration, touchedTimelines);
         backCopy.setPluginData(orbitMarkerKey, JSON.stringify({
           version: 2,
           preset: settings.preset,
