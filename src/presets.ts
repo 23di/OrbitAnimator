@@ -45,7 +45,17 @@ export const builtInPresetTunings: Record<PresetId, PresetTuning> = {
     appearance: { nearScale: 1.16, farScale: 0.68, farOpacity: 0.35, facePath: true },
   },
   vision: {
-    geometry: parametric({ xWave: "sin", yFrequency: 2, yAmplitude: 0.12, depthWave: "cos", depth: 320, tilt: 0, rotation: 0 }),
+    geometry: parametric({
+      xWave: "sin",
+      xAmplitude: 0.92,
+      yFrequency: 1,
+      yAmplitude: 0.08,
+      yPhase: 90,
+      depthWave: "cos",
+      depth: 340,
+      tilt: 0,
+      rotation: 0,
+    }),
     appearance: { nearScale: 1.32, farScale: 0.5, farOpacity: 0.22 },
   },
   scatter: {
@@ -65,7 +75,14 @@ export const builtInPresetTunings: Record<PresetId, PresetTuning> = {
     appearance: { nearScale: 1.22, farScale: 0.54, farOpacity: 0.26 },
   },
   "orbit-3d-tilted": {
-    geometry: parametric({ orient3d: true, depth: 290, tilt: 32, rotation: 0 }),
+    geometry: parametric({
+      orient3d: true,
+      yAmplitude: 0.65,
+      depth: 310,
+      tilt: 42,
+      circleRotation: -28,
+      rotation: 0,
+    }),
     appearance: { nearScale: 1.24, farScale: 0.52, farOpacity: 0.25 },
   },
   "orbit-3d-helix": {

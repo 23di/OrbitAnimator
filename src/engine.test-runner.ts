@@ -79,6 +79,20 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
+function trajectoryDistance(left: MotionSettings, right: MotionSettings): number {
+  let squaredDistance = 0;
+  const samples = 64;
+  for (let step = 0; step < samples; step += 1) {
+    const angle = step / samples * Math.PI * 2;
+    const leftPoint = pointForGeometry(angle, left, 3, 9);
+    const rightPoint = pointForGeometry(angle, right, 3, 9);
+    squaredDistance +=
+      ((leftPoint.x - rightPoint.x) / Math.max(left.geometry.radiusX, 1)) ** 2 +
+      ((leftPoint.y - rightPoint.y) / Math.max(left.geometry.radiusY, 1)) ** 2;
+  }
+  return Math.sqrt(squaredDistance / samples);
+}
+
 assert(presetOptions.length === 20, "Expected twenty presets");
 assert(
   presetOptions.filter((preset) => preset.value.startsWith("orbit-3d")).length === 6,
@@ -87,6 +101,14 @@ assert(
 assert(
   !presetOptions.some((preset) => String(preset.value) === "album-wall"),
   "Album Wall must not remain in the preset list",
+);
+assert(
+  trajectoryDistance(settingsForPreset("vision"), settingsForPreset("orbit-3d-eight")) > 0.2,
+  "Vision Focus and Figure Eight must keep visibly distinct trajectories",
+);
+assert(
+  trajectoryDistance(settingsForPreset("orbit-3d-ring"), settingsForPreset("orbit-3d-tilted")) > 0.2,
+  "Turntable and Saturn Tilt must keep visibly distinct trajectories",
 );
 
 const coverFlowPoint = pointForGeometry(Math.PI / 3, settingsForPreset("cover-flow"), 2, 9);

@@ -156,7 +156,7 @@ const controls = {
 const panelId = "orbit-motion-controls-v6";
 
 const builtInPresetSchemaKey = "orbit-built-in-preset-schema";
-const builtInPresetSchemaVersion = "4";
+const builtInPresetSchemaVersion = "5";
 let builtInPresetSchemaMigratedInSession = false;
 
 function shouldMigrateBuiltInPresets(): boolean {
