@@ -195,13 +195,19 @@ function easingFromTransition(transition: DialTransition): MotionEasing {
 
   if (Array.isArray(transition?.ease) && transition.ease.length === 4) {
     const [x1, y1, x2, y2] = transition.ease;
+    if (![x1, y1, x2, y2].every(Number.isFinite)) return { type: "LINEAR" };
     return {
       type: "CUSTOM_CUBIC_BEZIER",
-      easingFunctionCubicBezier: { x1, y1, x2, y2 },
+      easingFunctionCubicBezier: {
+        x1: Math.min(1, Math.max(0, x1)),
+        y1,
+        x2: Math.min(1, Math.max(0, x2)),
+        y2,
+      },
     };
   }
 
-  return { type: "EASE_IN_AND_OUT" };
+  return { type: "LINEAR" };
 }
 
 function floatTrack(
@@ -371,11 +377,7 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
     );
   }
 
-  const easing: MotionEasing = easingFromTransition({
-    type: "easing",
-    duration: 1,
-    ease: [0, 0, 1, 1],
-  });
+  const easing = easingFromTransition(settings.motion.fullCycle);
   const changed: string[] = [];
   const failures: string[] = [];
   const touchedTimelines = new Set<string>();

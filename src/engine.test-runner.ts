@@ -262,6 +262,16 @@ const sampled = sampleGeneratedKeyframes(
 );
 assert(sampled.x !== loop[0].x && sampled.x !== loop[1].x, "Preview sampling must interpolate keys");
 
+const easedSample = sampleGeneratedKeyframes(
+  loop,
+  firstSegmentMiddle,
+  { type: "easing", duration: 1, ease: [0.42, 0, 1, 1] },
+);
+assert(
+  Math.abs(easedSample.x - sampled.x) > 0.01,
+  "Preview sampling must apply the selected easing between keyframes",
+);
+
 const easedCycle = generateNodeKeyframes({
   ...settings,
   motion: {

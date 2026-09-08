@@ -149,6 +149,7 @@ const staleBack = source.clone();
 staleBack.setPluginData("orbit-motion", JSON.stringify({ role: "back", sourceId: source.id }));
 parent.insertChild(0, staleBack);
 settings.motion.duration = 3;
+settings.motion.fullCycle = { type: "easing", duration: 1, ease: [0.42, 0, 1, 1] };
 await onMessage({ type: "apply", settings });
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 assert(parent.children.includes(firstBack), "Refresh must reuse the existing paired back copy");
@@ -163,6 +164,41 @@ assert.equal(
   3,
   "Refreshed back-copy tracks must end at the new duration",
 );
+for (const node of [source, firstBack]) {
+  const easing = node.manualKeyframeTracks.TRANSLATION_X.keyframes[0].easing;
+  assert.equal(easing.type, "CUSTOM_CUBIC_BEZIER", "Selected easing must be written to every track");
+  assert.deepEqual(
+    easing.easingFunctionCubicBezier,
+    { x1: 0.42, y1: 0, x2: 1, y2: 1 },
+    "Front and back tracks must use the selected easing curve",
+  );
+}
+
+const timingCases = [
+  { duration: 0.4, ease: [0, 0, 1, 1] },
+  { duration: 3, ease: [0.42, 0, 1, 1] },
+  { duration: 5, ease: [0, 0, 0.58, 1] },
+  { duration: 12, ease: [0.42, 0, 0.58, 1] },
+] as const;
+for (const timing of timingCases) {
+  settings.motion.duration = timing.duration;
+  settings.motion.fullCycle = { type: "easing", duration: 1, ease: [...timing.ease] };
+  await onMessage({ type: "apply", settings });
+  assert.equal(timeline.duration, timing.duration, "Every supported duration must update the timeline");
+  for (const node of [source, firstBack]) {
+    const track = node.manualKeyframeTracks.TRANSLATION_X;
+    assert.equal(
+      track.keyframes.at(-1).timelinePosition,
+      timing.duration,
+      "Front and back tracks must end at every selected duration",
+    );
+    assert.deepEqual(
+      track.keyframes[0].easing.easingFunctionCubicBezier,
+      { x1: timing.ease[0], y1: timing.ease[1], x2: timing.ease[2], y2: timing.ease[3] },
+      "Every built-in easing must be written to front and back tracks",
+    );
+  }
+}
 
 await onMessage({ type: "clear", scope: "selection" });
 assert.equal(parent.children.length, 1, "Clear must remove every linked back copy");

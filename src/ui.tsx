@@ -629,7 +629,7 @@ function OrbitPreview({
       const point = sampleGeneratedKeyframes(
         layerFrames,
         time,
-        { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
+        settings.motion.fullCycle,
       );
       return {
         index,
