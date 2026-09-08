@@ -148,7 +148,12 @@ function resolveTargets(scope: TargetScope): MotionNode[] {
   const expanded: SceneNode[] = [];
 
   for (const node of selected) {
-    if (scope === "deep") {
+    // Refresh an already animated source directly. Expanding it again in
+    // Children/Deep mode would move the target one level farther down after
+    // the previous Apply selected or left an animated container active.
+    if (readOrbitMarker(node)?.role === "front") {
+      expanded.push(node);
+    } else if (scope === "deep") {
       expanded.push(...collectDescendants(node, true));
     } else if (scope === "children" || isTimelineOwner(node)) {
       expanded.push(...collectDescendants(node, false));
@@ -563,7 +568,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
     throw new Error(failures[0] ?? "Figma Motion is unavailable for this selection.");
   }
 
-  figma.currentPage.selection = targets;
   figma.viewport.scrollAndZoomIntoView(targets);
   post({
     type: "result",

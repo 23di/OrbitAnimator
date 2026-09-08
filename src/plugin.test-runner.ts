@@ -8,8 +8,11 @@ const nodes = new Map<string, any>();
 const timeline = { id: "timeline-1", duration: 5 };
 let proxyChildReads = false;
 const parent = {
+  id: "frame-1",
+  name: "Orbit Frame",
   type: "FRAME",
   parent: { type: "PAGE" },
+  getPluginData: () => "",
   _children: [] as any[],
   get children() {
     return proxyChildReads
@@ -362,6 +365,27 @@ assert(
   postedMessages.some((message) => message.type === "result" && message.kind === "error" && message.message === "No Orbit Animator motion in the current selection."),
   "Clearing an unchanged selection must report an error",
 );
+
+globalThis.figma.currentPage.selection = [parent];
+settings.other.scope = "children";
+await onMessage({ type: "apply", settings });
+assert.deepEqual(
+  globalThis.figma.currentPage.selection,
+  [parent],
+  "Applying to a top-level frame must preserve the user's frame selection",
+);
+assert.equal(parent.children.length, 2, "Frame Apply must create one back copy");
+const frameApplyBack = currentBack();
+await onMessage({ type: "apply", settings });
+assert.deepEqual(
+  globalThis.figma.currentPage.selection,
+  [parent],
+  "Refreshing must continue targeting the selected frame",
+);
+assert.equal(parent.children.length, 2, "Frame Refresh must not create extra copies");
+assert.equal(currentBack().id, frameApplyBack.id, "Frame Refresh must preserve its paired copy");
+await onMessage({ type: "clear", scope: "children" });
+assert.equal(parent.children.length, 1, "Frame Clear must remove the paired copy");
 
 globalThis.figma.currentPage.selection = [];
 await onMessage({ type: "apply", settings });
