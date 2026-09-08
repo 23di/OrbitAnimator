@@ -1,11 +1,12 @@
 import { build, context } from "esbuild";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const watch = process.argv.includes("--watch");
 
+await rm(resolve(root, "dist"), { recursive: true, force: true });
 await mkdir(resolve(root, "dist"), { recursive: true });
 await copyFile(
   resolve(root, "THIRD_PARTY_NOTICES.md"),
@@ -14,9 +15,13 @@ await copyFile(
 
 const shared = {
   bundle: true,
-  sourcemap: true,
+  minify: true,
+  sourcemap: false,
   target: "es2020",
   logLevel: "info",
+  define: {
+    "process.env.NODE_ENV": '"production"',
+  },
 };
 
 async function buildMain() {
@@ -34,7 +39,6 @@ async function buildUi() {
     // The UI is inlined into ui.html. Source-map directives inside inline CSS
     // or JS are resolved against the open Figma document URL and trigger CSP
     // network requests (for example, ui.css.map on figma.com).
-    sourcemap: false,
     entryPoints: [resolve(root, "src/ui.tsx")],
     outfile: resolve(root, "dist/ui.js"),
     write: false,

@@ -1169,7 +1169,7 @@ function App() {
       if (!message) return;
       if (message.type === "selection") setSelection(message.selection);
       if (message.type === "result") {
-        setStatus(message.kind === "error" ? { kind: message.kind, message: message.message } : null);
+        setStatus({ kind: message.kind, message: message.message });
       }
     };
     send({ type: "refresh-selection" });

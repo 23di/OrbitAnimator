@@ -479,6 +479,7 @@ async function clearMotion(scope: TargetScope): Promise<void> {
   }
 
   let cleared = 0;
+  let failures = 0;
   for (const node of orbitTargets) {
     try {
       const backCopies = await findBackCopies(node);
@@ -490,9 +491,19 @@ async function clearMotion(scope: TargetScope): Promise<void> {
       cleared += 1;
     } catch {
       // Some instance descendants are read-only; continue with the rest.
+      failures += 1;
     }
   }
-  post({ type: "result", kind: "success", message: `Cleared ${cleared} layer${cleared === 1 ? "" : "s"}.` });
+  if (cleared === 0) {
+    throw new Error("Orbit Animator could not clear motion from the selected layers.");
+  }
+  post({
+    type: "result",
+    kind: "success",
+    message: failures > 0
+      ? `Cleared ${cleared} layer${cleared === 1 ? "" : "s"}; ${failures} could not be changed.`
+      : `Cleared ${cleared} layer${cleared === 1 ? "" : "s"}.`,
+  });
   sendSelection();
 }
 

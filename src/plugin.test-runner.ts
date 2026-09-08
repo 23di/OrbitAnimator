@@ -57,11 +57,12 @@ function makeNode(name: string): any {
 const source = makeNode("Card");
 parent.children = [source];
 let onMessage: ((message: unknown) => Promise<void>) | undefined;
+const postedMessages: any[] = [];
 globalThis.__html__ = "";
 globalThis.figma = {
   showUI() {},
   ui: {
-    postMessage() {},
+    postMessage(message: unknown) { postedMessages.push(message); },
     resize() {},
     set onmessage(handler) { onMessage = handler; },
     get onmessage() { return onMessage; },
@@ -127,6 +128,10 @@ const settings: MotionSettings = {
 
 assert(onMessage, "Plugin message handler must be registered");
 await onMessage({ type: "apply", settings });
+assert(
+  postedMessages.some((message) => message.type === "result" && message.kind === "success" && message.message === "Animated 1 layer."),
+  "Apply must report a successful result",
+);
 assert.equal(parent.children.length, 2, "Depth Split must create exactly one back copy");
 const firstBack = parent.children.find((node) => node !== source);
 assert(firstBack.locked, "Back copy must be locked after applying tracks");
@@ -146,5 +151,22 @@ assert(parent.children.includes(firstBack), "Refresh must reuse the existing pai
 await onMessage({ type: "clear", scope: "selection" });
 assert.equal(parent.children.length, 1, "Clear must remove every linked back copy");
 assert.equal(Object.keys(source.manualKeyframeTracks).length, 0, "Clear must remove source motion tracks");
+assert(
+  postedMessages.some((message) => message.type === "result" && message.kind === "success" && message.message === "Cleared 1 layer."),
+  "Clear must report a successful result",
+);
+
+await onMessage({ type: "clear", scope: "selection" });
+assert(
+  postedMessages.some((message) => message.type === "result" && message.kind === "error" && message.message === "No Orbit Animator motion in the current selection."),
+  "Clearing an unchanged selection must report an error",
+);
+
+globalThis.figma.currentPage.selection = [];
+await onMessage({ type: "apply", settings });
+assert(
+  postedMessages.some((message) => message.type === "result" && message.kind === "error" && message.message.startsWith("Select layers inside")),
+  "Applying with no selection must report an actionable error",
+);
 
 console.log("Orbit plugin doubling: all checks passed");
