@@ -1,0 +1,554 @@
+:root {
+  color: var(--figma-color-text, var(--orbit-text));
+  background: transparent;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  --line: var(--figma-color-border, rgba(255, 255, 255, 0.1));
+  --orbit-text: #f5f5f3;
+  --orbit-bg: var(--figma-color-bg, #10100f);
+  --orbit-icon: rgba(255,255,255,.6);
+  --orbit-icon-hover: rgba(255,255,255,.82);
+  --orbit-grid: rgba(255,255,255,.035);
+  --orbit-origin: #fff;
+  --orbit-origin-ring: rgba(255,255,255,.12);
+  --orbit-button-secondary: #2f2f2f;
+  --orbit-button-secondary-hover: #3a3a3a;
+  --orbit-button-secondary-active: #444;
+  --orbit-button-secondary-text: rgba(255,255,255,.82);
+  --orbit-button-primary: #e6e6e6;
+  --orbit-button-primary-hover: #fff;
+  --orbit-button-primary-active: #d2d2d2;
+  --orbit-button-primary-text: #1e1e1e;
+  --orbit-button-disabled: #282828;
+  --orbit-button-disabled-text: rgba(255,255,255,.32);
+  --orbit-button-primary-disabled: #555;
+  --orbit-button-primary-disabled-text: rgba(255,255,255,.46);
+  --orbit-scroll: rgba(255,255,255,.34);
+  --orbit-scroll-hover: rgba(255,255,255,.52);
+  --orbit-grip: rgba(255,255,255,.24);
+  --orbit-grip-hover: rgba(255,255,255,.48);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --orbit-text: #1f1f1f;
+    --line: var(--figma-color-border, rgba(0,0,0,.1));
+    --orbit-bg: var(--figma-color-bg, #fff);
+    --orbit-icon: rgba(0,0,0,.48);
+    --orbit-icon-hover: rgba(0,0,0,.76);
+    --orbit-grid: rgba(0,0,0,.045);
+    --orbit-origin: #111;
+    --orbit-origin-ring: rgba(0,0,0,.12);
+    --orbit-button-secondary: #e8e8e8;
+    --orbit-button-secondary-hover: #dedede;
+    --orbit-button-secondary-active: #d2d2d2;
+    --orbit-button-secondary-text: rgba(0,0,0,.72);
+    --orbit-button-primary: #353535;
+    --orbit-button-primary-hover: #242424;
+    --orbit-button-primary-active: #111;
+    --orbit-button-primary-text: #fff;
+    --orbit-button-disabled: #ededed;
+    --orbit-button-disabled-text: rgba(0,0,0,.28);
+    --orbit-button-primary-disabled: #c7c7c7;
+    --orbit-button-primary-disabled-text: rgba(0,0,0,.4);
+    --orbit-scroll: rgba(0,0,0,.28);
+    --orbit-scroll-hover: rgba(0,0,0,.46);
+    --orbit-grip: rgba(0,0,0,.22);
+    --orbit-grip-hover: rgba(0,0,0,.42);
+  }
+}
+
+body.figma-light {
+  --orbit-text: #1f1f1f;
+  --line: var(--figma-color-border, rgba(0,0,0,.1));
+  --orbit-bg: var(--figma-color-bg, #fff);
+  --orbit-icon: rgba(0,0,0,.48);
+  --orbit-icon-hover: rgba(0,0,0,.76);
+  --orbit-grid: rgba(0,0,0,.045);
+  --orbit-origin: #111;
+  --orbit-origin-ring: rgba(0,0,0,.12);
+  --orbit-button-secondary: #e8e8e8;
+  --orbit-button-secondary-hover: #dedede;
+  --orbit-button-secondary-active: #d2d2d2;
+  --orbit-button-secondary-text: rgba(0,0,0,.72);
+  --orbit-button-primary: #353535;
+  --orbit-button-primary-hover: #242424;
+  --orbit-button-primary-active: #111;
+  --orbit-button-primary-text: #fff;
+  --orbit-button-disabled: #ededed;
+  --orbit-button-disabled-text: rgba(0,0,0,.28);
+  --orbit-button-primary-disabled: #c7c7c7;
+  --orbit-button-primary-disabled-text: rgba(0,0,0,.4);
+  --orbit-scroll: rgba(0,0,0,.28);
+  --orbit-scroll-hover: rgba(0,0,0,.46);
+  --orbit-grip: rgba(0,0,0,.22);
+  --orbit-grip-hover: rgba(0,0,0,.42);
+}
+
+body.figma-dark {
+  --orbit-text: #f5f5f3;
+  --line: var(--figma-color-border, rgba(255,255,255,.1));
+  --orbit-bg: var(--figma-color-bg, #10100f);
+  --orbit-icon: rgba(255,255,255,.6);
+  --orbit-icon-hover: rgba(255,255,255,.82);
+  --orbit-grid: rgba(255,255,255,.035);
+  --orbit-origin: #fff;
+  --orbit-origin-ring: rgba(255,255,255,.12);
+  --orbit-button-secondary: #2f2f2f;
+  --orbit-button-secondary-hover: #3a3a3a;
+  --orbit-button-secondary-active: #444;
+  --orbit-button-secondary-text: rgba(255,255,255,.82);
+  --orbit-button-primary: #e6e6e6;
+  --orbit-button-primary-hover: #fff;
+  --orbit-button-primary-active: #d2d2d2;
+  --orbit-button-primary-text: #1e1e1e;
+  --orbit-button-disabled: #282828;
+  --orbit-button-disabled-text: rgba(255,255,255,.32);
+  --orbit-button-primary-disabled: #555;
+  --orbit-button-primary-disabled-text: rgba(255,255,255,.46);
+  --orbit-scroll: rgba(255,255,255,.34);
+  --orbit-scroll-hover: rgba(255,255,255,.52);
+  --orbit-grip: rgba(255,255,255,.24);
+  --orbit-grip-hover: rgba(255,255,255,.48);
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+html {
+  overflow-y: auto;
+}
+
+body {
+  background: transparent;
+  color: var(--figma-color-text, var(--orbit-text));
+}
+
+button,
+input,
+select { font: inherit; }
+
+main {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 96px;
+}
+
+.preview {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  isolation: isolate;
+}
+
+.preview.pinned {
+  position: sticky;
+  top: 0;
+  z-index: 80000;
+  background: var(--orbit-bg);
+}
+
+.preview-pin {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 30000;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  color: var(--orbit-icon);
+}
+
+.preview-pin:hover:not([aria-pressed="true"]) {
+  background: transparent;
+  color: var(--orbit-icon-hover);
+}
+
+.preview-pin svg {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.preview-pin[aria-pressed="true"] {
+  background: var(--orbit-bg);
+  color: var(--figma-color-text, var(--orbit-text));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.preview-pin[aria-pressed="true"]:hover {
+  background: var(--orbit-bg);
+}
+
+.preview-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--orbit-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--orbit-grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.75), transparent);
+}
+
+.preview-origin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--orbit-origin);
+  box-shadow: 0 0 0 3px var(--orbit-origin-ring);
+  transform: translate(-50%, -50%);
+}
+
+.preview-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: flex-end;
+  padding: 6px;
+  background: #ff6534;
+  color: rgba(255,255,255,.82);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+.preview-card-1 { background: #c4ff48; color: #10100f; }
+.preview-card-2 { background: #559eff; }
+.preview-card-3 { background: #bd78f0; }
+.preview-card-4 { background: #e6cc72; color: #10100f; }
+
+.status {
+  padding: 8px 10px;
+  font-size: 10px;
+  line-height: 1.35;
+  animation: status-in 220ms var(--ease-out) both;
+}
+
+.status.success { color: var(--figma-color-text-secondary, var(--dial-text-secondary)); }
+.status.error { color: #ff9a7a; }
+
+.dial-panel {
+  overflow: visible;
+}
+
+.dial-panel > * { width: 100% !important; }
+
+.dial-panel .dialkit-panel-inner {
+  background: transparent;
+  padding: 0;
+}
+
+.dial-panel .dialkit-folder-root > .dialkit-panel-header > .dialkit-folder-header-top,
+.orbit-hidden-preset,
+.orbit-hidden-base-preset {
+  display: none !important;
+}
+
+.dial-panel .dialkit-folder-root > .dialkit-panel-header {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.orbit-library-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 12px 8px 0;
+}
+
+.orbit-library-links a {
+  color: var(--dial-text-secondary, rgba(255,255,255,.56));
+  font-size: 10px;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.orbit-library-links a:hover {
+  color: var(--dial-text-primary, rgba(255,255,255,.92));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.orbit-library-links a:focus-visible {
+  border-radius: 3px;
+  outline: 1px solid var(--dial-text-primary, rgba(255,255,255,.92));
+  outline-offset: 2px;
+}
+
+.bottom-actions {
+  position: fixed;
+  right: 16px;
+  bottom: 26px;
+  left: 16px;
+  z-index: 90000;
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 8px;
+}
+
+.bottom-actions .dialkit-button {
+  width: auto;
+  height: 44px;
+  background: var(--orbit-button-secondary);
+  color: var(--orbit-button-secondary-text);
+}
+
+.bottom-actions .dialkit-button:hover:not(:disabled) {
+  background: var(--orbit-button-secondary-hover);
+  color: var(--dial-text-primary);
+}
+
+.bottom-actions .dialkit-button:active:not(:disabled) {
+  background: var(--orbit-button-secondary-active);
+}
+
+.bottom-actions .dialkit-button:last-child {
+  background: var(--orbit-button-primary);
+  color: var(--orbit-button-primary-text);
+}
+
+.bottom-actions .dialkit-button:last-child:hover:not(:disabled) {
+  background: var(--orbit-button-primary-hover);
+  color: var(--orbit-button-primary-text);
+}
+
+.bottom-actions .dialkit-button:last-child:active:not(:disabled) {
+  background: var(--orbit-button-primary-active);
+}
+
+.bottom-actions .dialkit-button:disabled {
+  cursor: default;
+  background: var(--orbit-button-disabled);
+  color: var(--orbit-button-disabled-text);
+  opacity: 1;
+}
+
+.bottom-actions .dialkit-button:last-child:disabled {
+  background: var(--orbit-button-primary-disabled);
+  color: var(--orbit-button-primary-disabled-text);
+}
+
+.overlay-scrollbar {
+  position: fixed;
+  top: 0;
+  right: 2px;
+  bottom: 18px;
+  z-index: 110000;
+  width: 7px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.overlay-scrollbar.visible {
+  opacity: 1;
+}
+
+.overlay-scrollbar-thumb {
+  width: 100%;
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--orbit-scroll);
+  background-clip: padding-box;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.overlay-scrollbar-thumb:hover,
+.overlay-scrollbar-thumb:active {
+  background: var(--orbit-scroll-hover);
+  background-clip: padding-box;
+}
+
+.resize-handle {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100000;
+  display: flex;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--line);
+  background: var(--orbit-bg);
+  cursor: ns-resize;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.resize-grip {
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--orbit-grip);
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    width 160ms var(--ease-out),
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 120ms var(--ease-out);
+}
+
+.resize-handle:hover .resize-grip,
+.resize-handle:focus-visible .resize-grip {
+  width: 48px;
+  background: var(--orbit-grip-hover);
+}
+
+.resize-handle:focus-visible .resize-grip {
+  box-shadow: 0 0 0 3px var(--line);
+}
+
+.resize-handle.dragging .resize-grip {
+  width: 58px;
+  background: var(--orbit-origin);
+  box-shadow: 0 0 16px var(--line);
+  transform: scaleY(1.25);
+}
+
+@keyframes status-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dialkit-segmented-button.orbit-hidden-transition-mode {
+  display: none;
+}
+
+.orbit-hidden-transition-type,
+.orbit-hidden-transition-duration,
+.orbit-hidden-custom-path,
+.orbit-hidden-path-mode {
+  display: none !important;
+}
+
+.orbit-inline-transition-folder > .dialkit-folder-header {
+  display: none;
+}
+
+.orbit-inline-transition-folder > .dialkit-folder-inner {
+  padding-top: 0;
+}
+
+.orbit-easing-toolbar {
+  margin: 0;
+}
+
+.orbit-path-portal {
+  padding: 0 0 6px;
+}
+
+.orbit-path-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dial-row-gap);
+}
+
+.orbit-path-mode-switch .dialkit-segmented {
+  margin-right: -6px;
+}
+
+.orbit-path-editor {
+  display: block;
+  align-self: center;
+  max-width: 100%;
+  max-height: 240px;
+  height: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.orbit-path-editor-preview {
+  cursor: default;
+}
+
+.orbit-path-editor rect {
+  fill: var(--dial-surface);
+}
+
+.orbit-path-grid {
+  fill: none;
+  stroke: var(--dial-border);
+  stroke-width: 1;
+}
+
+.orbit-path-line {
+  fill: none;
+  stroke: var(--dial-text-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.orbit-path-line-preview {
+  opacity: .52;
+  stroke-width: 1.5;
+}
+
+.orbit-handle-guide {
+  stroke: var(--dial-text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: .56;
+}
+
+.orbit-rotation-handle {
+  fill: var(--dial-accent, var(--dial-text-primary));
+}
+
+.orbit-tilt-handle {
+  fill: var(--dial-text-secondary);
+}
+
+.orbit-path-handle {
+  fill: var(--dial-text-primary);
+  stroke: var(--dial-surface);
+  stroke-width: 3;
+  cursor: grab;
+}
+
+.orbit-radius-disabled {
+  opacity: .42;
+  pointer-events: none;
+}
+
+.orbit-control-hidden {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

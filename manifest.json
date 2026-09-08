@@ -1,0 +1,12 @@
+{
+  "name": "Orbit Animator",
+  "id": "1678895127426205163",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}
