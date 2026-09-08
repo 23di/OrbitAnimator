@@ -262,6 +262,13 @@ main {
   padding: 0;
 }
 
+.dial-panel .dialkit-toolbar-copy,
+.dial-panel button[title="Copy parameters"],
+.dial-panel button[aria-label="Copy parameters"],
+.dial-panel button[aria-label="Copied parameters"] {
+  display: none !important;
+}
+
 .dial-panel .dialkit-folder-root > .dialkit-panel-header > .dialkit-folder-header-top,
 .orbit-hidden-preset,
 .orbit-hidden-base-preset {
@@ -533,11 +540,6 @@ main {
   stroke: var(--dial-surface);
   stroke-width: 3;
   cursor: grab;
-}
-
-.orbit-radius-disabled {
-  opacity: .42;
-  pointer-events: none;
 }
 
 .orbit-control-hidden {

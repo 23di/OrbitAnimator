@@ -36,6 +36,7 @@ const orbitMarkerKey = "orbit-motion";
 const pluginWidth = 360;
 const minPluginHeight = 420;
 const maxPluginHeight = 960;
+const internalKeyframeSamples = 32;
 
 interface OrbitMarker {
   version: number;
@@ -507,7 +508,10 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       nodeWidth,
       nodeHeight,
     );
-    const frames = generateNodeKeyframes(fittedSettings, index, targets.length);
+    const frames = generateNodeKeyframes({
+      ...fittedSettings,
+      motion: { ...fittedSettings.motion, keyframes: internalKeyframeSamples },
+    }, index, targets.length);
     const centerOffset = settings.other.centerBeforeApply
       ? frameCenterOffset(node)
       : { x: 0, y: 0 };

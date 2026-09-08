@@ -104,11 +104,12 @@ const settings: MotionSettings = {
   motion: {
     duration: 5,
     stagger: 0,
-    keyframes: 30,
+    keyframes: 32,
     direction: "clockwise",
     fullCycle: { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
   },
   geometry: {
+    advanced: false,
     shape: "parametric",
     dynamicScale: false,
     customPath: "[[0,0.5],[1,0.5]]",

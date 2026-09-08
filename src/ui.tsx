@@ -35,7 +35,6 @@ const controls = {
     _collapsed: true,
     duration: [5, 0.4, 12, 0.1],
     stagger: [0, 0, 1.5, 0.01],
-    keyframes: [30, 4, 48, 1],
     direction: {
       type: "select",
       options: [
@@ -52,6 +51,7 @@ const controls = {
   },
   geometry: {
     _collapsed: true,
+    advanced: false,
     shape: {
       type: "select",
       options: [
@@ -154,9 +154,10 @@ const controls = {
 } satisfies DialConfig;
 
 const panelId = "orbit-motion-controls-v6";
+const internalKeyframeSamples = 32;
 
 const builtInPresetSchemaKey = "orbit-built-in-preset-schema";
-const builtInPresetSchemaVersion = "5";
+const builtInPresetSchemaVersion = "6";
 let builtInPresetSchemaMigratedInSession = false;
 
 function shouldMigrateBuiltInPresets(): boolean {
@@ -924,6 +925,10 @@ function App() {
       if (action === "other.resetSettings") resetSettings();
     },
   }) as unknown as MotionSettings;
+  const effectiveValues: MotionSettings = {
+    ...values,
+    motion: { ...values.motion, keyframes: internalKeyframeSamples },
+  };
 
   useEffect(() => {
     const storedPresets = DialStore.getPresets(panelId);
@@ -1097,6 +1102,7 @@ function App() {
 
   useEffect(() => {
     const disabled = values.geometry.dynamicScale;
+    const advanced = values.geometry.advanced;
     const parametric = values.geometry.shape === "parametric";
     const depthWave = parametric || values.geometry.shape === "ellipse" ||
       values.geometry.shape === "custom-path";
@@ -1108,19 +1114,19 @@ function App() {
     document.querySelectorAll<HTMLElement>(".dialkit-select-row").forEach((row) => {
       const label = row.querySelector<HTMLElement>(".dialkit-select-label")?.textContent?.trim();
       if (label === "X Wave" || label === "Y Wave") {
-        row.classList.toggle("orbit-control-hidden", !parametric);
+        row.classList.toggle("orbit-control-hidden", !advanced || !parametric);
       } else if (label === "Depth Wave") {
-        row.classList.toggle("orbit-control-hidden", !depthWave);
+        row.classList.toggle("orbit-control-hidden", !advanced || !depthWave);
       }
     });
     document.querySelectorAll<HTMLElement>(".dialkit-slider-wrapper").forEach((wrapper) => {
       const label = wrapper.querySelector<HTMLElement>(".dialkit-slider-label")?.textContent?.trim();
       if (["X Frequency", "Y Frequency", "X Amplitude", "Y Amplitude", "X Phase", "Y Phase", "Y Offset"].includes(label ?? "")) {
-        wrapper.classList.toggle("orbit-control-hidden", !parametric);
+        wrapper.classList.toggle("orbit-control-hidden", !advanced || !parametric);
         return;
       }
       if (["Depth Frequency", "Depth Amplitude", "Depth Phase"].includes(label ?? "")) {
-        wrapper.classList.toggle("orbit-control-hidden", !depthWave);
+        wrapper.classList.toggle("orbit-control-hidden", !advanced || !depthWave);
         return;
       }
       if (label === "Shape Amount") {
@@ -1154,7 +1160,7 @@ function App() {
         return;
       }
       if (label === "Radius X" || label === "Radius Y") {
-        wrapper.classList.toggle("orbit-radius-disabled", disabled);
+        wrapper.classList.toggle("orbit-control-hidden", disabled);
         wrapper.inert = disabled;
         wrapper.setAttribute("aria-disabled", String(disabled));
         const slider = wrapper.querySelector<HTMLElement>('[role="slider"]');
@@ -1163,7 +1169,7 @@ function App() {
         else slider?.setAttribute("tabindex", "0");
       }
     });
-  }, [values.geometry.dynamicScale, values.geometry.shape, values.geometry.orient3d, pathPortalHost]);
+  }, [values.geometry.advanced, values.geometry.dynamicScale, values.geometry.shape, values.geometry.orient3d, pathPortalHost]);
 
   useEffect(() => {
     window.onmessage = (event: MessageEvent<{ pluginMessage?: PluginToUiMessage }>) => {
@@ -1171,7 +1177,7 @@ function App() {
       if (!message) return;
       if (message.type === "selection") setSelection(message.selection);
       if (message.type === "result") {
-        setStatus({ kind: message.kind, message: message.message });
+        setStatus(message.kind === "error" ? message : null);
       }
     };
     send({ type: "refresh-selection" });
@@ -1180,23 +1186,23 @@ function App() {
     };
   }, []);
 
-  const activeTarget = selection.targets[values.other.scope];
+  const activeTarget = selection.targets[effectiveValues.other.scope];
   const hasOrbitMotion = activeTarget.orbitCount > 0;
   const canApply = activeTarget.count > 0;
 
   const applyMotion = () => {
     setStatus(null);
-    send({ type: "apply", settings: values });
+    send({ type: "apply", settings: effectiveValues });
   };
 
   const clearMotion = () => {
     setStatus(null);
-    send({ type: "clear", scope: values.other.scope });
+    send({ type: "clear", scope: effectiveValues.other.scope });
   };
 
   return (
     <main>
-      <OrbitPreview settings={values} target={selection.targets[values.other.scope]} />
+      <OrbitPreview settings={effectiveValues} target={selection.targets[effectiveValues.other.scope]} />
 
       {status && <div className={`status ${status.kind}`}>{status.message}</div>}
 
@@ -1206,8 +1212,8 @@ function App() {
           <EasingPresetManager transition={values.motion.fullCycle} />,
           easingPortalHost,
         )}
-        {pathPortalHost && (supportsPathGeometry(values.geometry.shape) || supportsOrbitOrientation(values.geometry)) && createPortal(
-          <GeometryPathEditor settings={values} target={selection.targets[values.other.scope]} />,
+        {pathPortalHost && (supportsPathGeometry(effectiveValues.geometry.shape) || supportsOrbitOrientation(effectiveValues.geometry)) && createPortal(
+          <GeometryPathEditor settings={effectiveValues} target={selection.targets[effectiveValues.other.scope]} />,
           pathPortalHost,
         )}
       </section>

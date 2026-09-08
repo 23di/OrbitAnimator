@@ -21,6 +21,7 @@ const settings: MotionSettings = {
     fullCycle: { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
   },
   geometry: {
+    advanced: false,
     shape: "parametric",
     dynamicScale: true,
     customPath: "[[0.5,0],[1,0.5],[0.5,1],[0,0.5]]",
