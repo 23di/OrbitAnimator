@@ -6,7 +6,6 @@ import {
   generateNodeKeyframes,
 } from "./engine";
 import type {
-  DialTransition,
   MotionSettings,
   PluginToUiMessage,
   SelectionSummary,
@@ -173,59 +172,154 @@ function hasOrbitMotion(node: MotionNode): boolean {
   return animatedFields.some((name) => Boolean(node.manualKeyframeTracks[name]));
 }
 
-function easingFromTransition(transition: DialTransition): MotionEasing {
-  if (transition?.type === "spring") {
-    let bounce = transition.bounce ?? 0.25;
-    if (
-      typeof transition.mass === "number" &&
-      typeof transition.stiffness === "number" &&
-      typeof transition.damping === "number"
-    ) {
-      bounce = figma.motion.physicalSpringToNormalized({
-        mass: transition.mass,
-        stiffness: transition.stiffness,
-        damping: transition.damping,
-      });
-    }
-    return {
-      type: "CUSTOM_SPRING",
-      easingFunctionSpring: { bounce: Math.min(1, Math.max(0, bounce)) },
-    };
-  }
+const linearEasing: MotionEasing = { type: "LINEAR" };
+const holdEasing: MotionEasing = { type: "HOLD" };
 
-  if (Array.isArray(transition?.ease) && transition.ease.length === 4) {
-    const [x1, y1, x2, y2] = transition.ease;
-    if (![x1, y1, x2, y2].every(Number.isFinite)) return { type: "LINEAR" };
-    return {
-      type: "CUSTOM_CUBIC_BEZIER",
-      easingFunctionCubicBezier: {
-        x1: Math.min(1, Math.max(0, x1)),
-        y1,
-        x2: Math.min(1, Math.max(0, x2)),
-        y2,
-      },
-    };
-  }
-
-  return { type: "LINEAR" };
+function cubicValue(progress: number, a: number, b: number, c: number, d: number): number {
+  const inverse = 1 - progress;
+  return inverse ** 3 * a +
+    3 * inverse ** 2 * progress * b +
+    3 * inverse * progress ** 2 * c +
+    progress ** 3 * d;
 }
 
-function floatTrack(
+/**
+ * Fits the generated samples with piecewise cubic Hermite segments. Figma's
+ * easing lives on the destination keyframe, so each returned key carries the
+ * curve for the segment that leads into it. Using 1/3 and 2/3 for the easing's
+ * X handles makes its parameter exactly linear in timeline time; the Y handles
+ * can then encode the sampled property's curve directly.
+ */
+function sparseFloatTrack(
   baseValue: number,
   frames: ReturnType<typeof generateNodeKeyframes>,
   value: (frame: ReturnType<typeof generateNodeKeyframes>[number]) => number,
-  easing: MotionEasing,
+  tolerance: number,
 ): ManualKeyframeTrackInput {
+  const values = frames.map(value);
+  const selected = new Map<number, MotionEasing>();
+  selected.set(0, holdEasing);
+
+  const fit = (start: number, end: number): void => {
+    if (end <= start) return;
+    if (end - start === 1) {
+      selected.set(end, linearEasing);
+      return;
+    }
+
+    const startTime = frames[start].time;
+    const endTime = frames[end].time;
+    const duration = endTime - startTime;
+    const delta = values[end] - values[start];
+    let split = start + 1;
+    let maximumError = -1;
+
+    if (duration > Number.EPSILON && Math.abs(delta) > Number.EPSILON) {
+      const startStep = frames[start + 1].time - startTime;
+      const endStep = endTime - frames[end - 1].time;
+      const startSlope = startStep > Number.EPSILON
+        ? (values[start + 1] - values[start]) / startStep
+        : 0;
+      const endSlope = endStep > Number.EPSILON
+        ? (values[end] - values[end - 1]) / endStep
+        : 0;
+      const y1 = startSlope * duration / (3 * delta);
+      const y2 = 1 - endSlope * duration / (3 * delta);
+      const candidates: Array<[number, number]> = [[y1, y2]];
+
+      // A least-squares candidate handles globally eased or spring-warped
+      // cycles with fewer segments than endpoint slopes alone.
+      let a11 = 0;
+      let a12 = 0;
+      let a22 = 0;
+      let b1 = 0;
+      let b2 = 0;
+      for (let index = start + 1; index < end; index += 1) {
+        const progress = (frames[index].time - startTime) / duration;
+        const inverse = 1 - progress;
+        const basis1 = 3 * inverse ** 2 * progress;
+        const basis2 = 3 * inverse * progress ** 2;
+        const target = (values[index] - values[start]) / delta - progress ** 3;
+        a11 += basis1 ** 2;
+        a12 += basis1 * basis2;
+        a22 += basis2 ** 2;
+        b1 += basis1 * target;
+        b2 += basis2 * target;
+      }
+      const determinant = a11 * a22 - a12 ** 2;
+      if (Math.abs(determinant) > 1e-9) {
+        candidates.push([
+          (b1 * a22 - b2 * a12) / determinant,
+          (a11 * b2 - a12 * b1) / determinant,
+        ]);
+      }
+
+      let best: { y1: number; y2: number; error: number; split: number } | null = null;
+      for (const [candidateY1, candidateY2] of candidates) {
+        if (
+          !Number.isFinite(candidateY1) || !Number.isFinite(candidateY2) ||
+          Math.abs(candidateY1) > 6 || Math.abs(candidateY2) > 6
+        ) continue;
+        let candidateError = -1;
+        let candidateSplit = start + 1;
+        for (let index = start + 1; index < end; index += 1) {
+          const progress = (frames[index].time - startTime) / duration;
+          const predicted = values[start] +
+            delta * cubicValue(progress, 0, candidateY1, candidateY2, 1);
+          const error = Math.abs(predicted - values[index]);
+          if (error > candidateError) {
+            candidateError = error;
+            candidateSplit = index;
+          }
+        }
+        if (!best || candidateError < best.error) {
+          best = { y1: candidateY1, y2: candidateY2, error: candidateError, split: candidateSplit };
+        }
+      }
+      if (best) {
+        maximumError = best.error;
+        split = best.split;
+        if (best.error <= tolerance) {
+          selected.set(end, {
+            type: "CUSTOM_CUBIC_BEZIER",
+            easingFunctionCubicBezier: {
+              x1: 1 / 3,
+              y1: best.y1,
+              x2: 2 / 3,
+              y2: best.y2,
+            },
+          });
+          return;
+        }
+      }
+    } else {
+      for (let index = start + 1; index < end; index += 1) {
+        const error = Math.abs(values[index] - values[start]);
+        if (error > maximumError) {
+          maximumError = error;
+          split = index;
+        }
+      }
+      if (maximumError <= tolerance) {
+        selected.set(end, linearEasing);
+        return;
+      }
+    }
+
+    fit(start, split);
+    fit(split, end);
+  };
+
+  fit(0, frames.length - 1);
   return {
     baseValue: { type: "FLOAT", value: baseValue },
-    keyframes: frames.map((frame, index) => ({
-      timelinePosition: frame.time,
-      // Figma stores interpolation on the destination keyframe. The first
-      // key has no incoming segment; putting HOLD on the closing key freezes
-      // the final leg and causes a visible jump when the loop restarts.
-      easing: index === 0 ? { type: "HOLD" } : easing,
-      value: { type: "FLOAT", value: value(frame) },
-    })),
+    keyframes: [...selected.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([index, easing]) => ({
+        timelinePosition: frames[index].time,
+        easing,
+        value: { type: "FLOAT", value: values[index] },
+      })),
   };
 }
 
@@ -339,36 +433,35 @@ function applyTracks(
   node: MotionNode,
   frames: ReturnType<typeof generateNodeKeyframes>,
   centerOffset: { x: number; y: number },
-  easing: MotionEasing,
   opacity: (frame: ReturnType<typeof generateNodeKeyframes>[number]) => number,
 ): void {
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "TRANSLATION_X" },
-    floatTrack(centerOffset.x, frames, (frame) => centerOffset.x + frame.x, easing),
+    sparseFloatTrack(centerOffset.x, frames, (frame) => centerOffset.x + frame.x, 0.75),
   );
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "TRANSLATION_Y" },
-    floatTrack(centerOffset.y, frames, (frame) => centerOffset.y + frame.y, easing),
+    sparseFloatTrack(centerOffset.y, frames, (frame) => centerOffset.y + frame.y, 0.75),
   );
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "SCALE_X" },
-    floatTrack(1, frames, (frame) => frame.scaleX, easing),
+    sparseFloatTrack(1, frames, (frame) => frame.scaleX, 0.003),
   );
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "SCALE_Y" },
-    floatTrack(1, frames, (frame) => frame.scaleY, easing),
+    sparseFloatTrack(1, frames, (frame) => frame.scaleY, 0.003),
   );
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "ROTATION" },
-    floatTrack(0, frames, (frame) => frame.rotation, easing),
+    sparseFloatTrack(0, frames, (frame) => frame.rotation, 0.25),
   );
   node.applyManualKeyframeTrack(
     { type: "PROPERTY", name: "OPACITY" },
-    floatTrack(
+    sparseFloatTrack(
       "opacity" in node && typeof node.opacity === "number" ? node.opacity : 1,
       frames,
       opacity,
-      easing,
+      0.004,
     ),
   );
 }
@@ -393,7 +486,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
     );
   }
 
-  const easing = easingFromTransition(settings.motion.fullCycle);
   const changed: string[] = [];
   const failures: string[] = [];
   const touchedTimelines = new Set<string>();
@@ -425,7 +517,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
           backCopy,
           frames,
           centerOffset,
-          easing,
           (frame) => depthSplitOpacity(frame, "back"),
         );
       } else {
@@ -437,7 +528,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
         node,
         frames,
         centerOffset,
-        easing,
         (frame) => settings.other.depthSplit
           ? depthSplitOpacity(frame, "front")
           : frame.opacity,

@@ -49,7 +49,7 @@ async function buildUi() {
   const js = result.outputFiles.find((file) => file.path.endsWith(".js"));
   const css = result.outputFiles.find((file) => file.path.endsWith(".css"));
   const offlineCss = (css?.text ?? "").replace(
-    /^@import\s+["']https:\/\/fonts\.googleapis\.com\/[^"']+["'];?\s*/gm,
+    /@import\s*(?:url\()?\s*["']https:\/\/fonts\.googleapis\.com\/[^"']+["']\s*\)?\s*;?/gi,
     "",
   );
   const template = await readFile(resolve(root, "src/ui.html"), "utf8");
@@ -59,6 +59,9 @@ async function buildUi() {
 
   if (html.includes("sourceMappingURL=")) {
     throw new Error("Inline plugin UI must not contain source-map URLs");
+  }
+  if (/\@import\s*(?:url\()?\s*["']?https?:\/\//i.test(html)) {
+    throw new Error("Inline plugin UI must not contain remote CSS imports");
   }
 
   await writeFile(resolve(root, "dist/ui.html"), html);

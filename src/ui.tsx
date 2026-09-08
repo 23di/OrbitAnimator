@@ -629,7 +629,9 @@ function OrbitPreview({
       const point = sampleGeneratedKeyframes(
         layerFrames,
         time,
-        settings.motion.fullCycle,
+        // Full-cycle timing is already baked into generateNodeKeyframes.
+        // Interpolating those samples with it again would double-apply easing.
+        { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
       );
       return {
         index,

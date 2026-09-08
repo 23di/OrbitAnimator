@@ -1,5 +1,6 @@
 // @ts-nocheck
 import assert from "node:assert/strict";
+import { depthSplitOpacity, generateNodeKeyframes } from "./engine";
 import type { MotionSettings } from "./types";
 
 let nextId = 1;
@@ -100,7 +101,7 @@ const settings: MotionSettings = {
   motion: {
     duration: 5,
     stagger: 0,
-    keyframes: 8,
+    keyframes: 30,
     direction: "clockwise",
     fullCycle: { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
   },
@@ -145,6 +146,60 @@ const settings: MotionSettings = {
   other: { centerBeforeApply: true, depthSplit: true, scope: "selection" },
 };
 
+function cubic(progress: number, a: number, b: number, c: number, d: number): number {
+  const inverse = 1 - progress;
+  return inverse ** 3 * a + 3 * inverse ** 2 * progress * b +
+    3 * inverse * progress ** 2 * c + progress ** 3 * d;
+}
+
+function easingProgress(easing: any, progress: number): number {
+  if (easing.type === "HOLD") return 0;
+  if (easing.type !== "CUSTOM_CUBIC_BEZIER") return progress;
+  const curve = easing.easingFunctionCubicBezier;
+  let low = 0;
+  let high = 1;
+  let parameter = progress;
+  for (let iteration = 0; iteration < 18; iteration += 1) {
+    parameter = (low + high) / 2;
+    if (cubic(parameter, 0, curve.x1, curve.x2, 1) < progress) low = parameter;
+    else high = parameter;
+  }
+  return cubic(parameter, 0, curve.y1, curve.y2, 1);
+}
+
+function sampleTrack(track: any, time: number): number {
+  const keys = track.keyframes;
+  if (time <= keys[0].timelinePosition) return keys[0].value.value;
+  const last = keys.at(-1);
+  if (time >= last.timelinePosition) return last.value.value;
+  let destinationIndex = 1;
+  while (destinationIndex < keys.length - 1 && time > keys[destinationIndex].timelinePosition) {
+    destinationIndex += 1;
+  }
+  const from = keys[destinationIndex - 1];
+  const to = keys[destinationIndex];
+  const local = (time - from.timelinePosition) /
+    (to.timelinePosition - from.timelinePosition);
+  const progress = easingProgress(to.easing, local);
+  return from.value.value + (to.value.value - from.value.value) * progress;
+}
+
+function assertSparseTrackAccuracy(activeSettings: MotionSettings): void {
+  const frames = generateNodeKeyframes(activeSettings, 0, 1);
+  const tracks = source.manualKeyframeTracks;
+  for (const frame of frames) {
+    assert(Math.abs(sampleTrack(tracks.TRANSLATION_X, frame.time) - frame.x) <= 0.76);
+    assert(Math.abs(sampleTrack(tracks.TRANSLATION_Y, frame.time) - frame.y) <= 0.76);
+    assert(Math.abs(sampleTrack(tracks.SCALE_X, frame.time) - frame.scaleX) <= 0.0031);
+    assert(Math.abs(sampleTrack(tracks.SCALE_Y, frame.time) - frame.scaleY) <= 0.0031);
+    assert(Math.abs(sampleTrack(tracks.ROTATION, frame.time) - frame.rotation) <= 0.251);
+    const expectedOpacity = activeSettings.other.depthSplit
+      ? depthSplitOpacity(frame, "front")
+      : frame.opacity;
+    assert(Math.abs(sampleTrack(tracks.OPACITY, frame.time) - expectedOpacity) <= 0.0041);
+  }
+}
+
 assert(onMessage, "Plugin message handler must be registered");
 await onMessage({ type: "apply", settings });
 assert(
@@ -152,6 +207,11 @@ assert(
   "Apply must report a successful result",
 );
 assert.equal(parent.children.length, 2, "Depth Split must create exactly one back copy");
+assertSparseTrackAccuracy(settings);
+assert(
+  Math.max(...Object.values(source.manualKeyframeTracks).map((track: any) => track.keyframes.length)) <= 15,
+  "The standard orbit must compress every property from 31 samples to at most 15 keys",
+);
 const firstBack = parent.children.find((node) => node !== source);
 assert(firstBack.locked, "Back copy must be locked after applying tracks");
 assert.deepEqual(
@@ -189,6 +249,7 @@ await onMessage({ type: "apply", settings });
 proxyChildReads = false;
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 const refreshedBack = currentBack();
+assertSparseTrackAccuracy(settings);
 assert.equal(refreshedBack.id, firstBack.id, "Refresh must preserve the existing back-copy id");
 assert.deepEqual(
   new Set(refreshedBack.removedTrackNames),
@@ -222,11 +283,13 @@ for (const node of [source, refreshedBack]) {
     "The closing key must interpolate the final leg instead of jumping at loop end",
   );
   const easing = keyframes[1].easing;
-  assert.equal(easing.type, "CUSTOM_CUBIC_BEZIER", "Selected easing must be written to every track");
-  assert.deepEqual(
-    easing.easingFunctionCubicBezier,
-    { x1: 0.42, y1: 0, x2: 1, y2: 1 },
-    "Front and back tracks must use the selected easing curve",
+  assert(
+    easing.type === "CUSTOM_CUBIC_BEZIER" || easing.type === "LINEAR",
+    "Sparse tracks must use supported interpolation",
+  );
+  assert(
+    keyframes.length < settings.motion.keyframes + 1,
+    "Sparse motion must use fewer keys than the generated source samples",
   );
 }
 
@@ -259,10 +322,9 @@ for (const timing of timingCases) {
       timing.duration,
       "Front and back tracks must end at every selected duration",
     );
-    assert.deepEqual(
-      track.keyframes[1].easing.easingFunctionCubicBezier,
-      { x1: timing.ease[0], y1: timing.ease[1], x2: timing.ease[2], y2: timing.ease[3] },
-      "Every built-in easing must be written to front and back tracks",
+    assert(
+      track.keyframes.length < settings.motion.keyframes + 1,
+      "Every built-in timing must retain sparse front and back tracks",
     );
   }
 }
