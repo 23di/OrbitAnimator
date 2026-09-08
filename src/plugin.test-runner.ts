@@ -5,13 +5,22 @@ import type { MotionSettings } from "./types";
 let nextId = 1;
 const nodes = new Map<string, any>();
 const timeline = { id: "timeline-1", duration: 5 };
+let proxyChildReads = false;
 const parent = {
   type: "FRAME",
   parent: { type: "PAGE" },
-  children: [] as any[],
+  _children: [] as any[],
+  get children() {
+    return proxyChildReads
+      ? this._children.map((child: any) => new Proxy(child, {}))
+      : this._children;
+  },
+  set children(children: any[]) {
+    this._children = children;
+  },
   insertChild(index: number, node: any) {
-    this.children = this.children.filter((child) => child !== node);
-    this.children.splice(index, 0, node);
+    this._children = this._children.filter((child) => child.id !== node.id);
+    this._children.splice(index, 0, node);
     node.parent = this;
   },
 };
@@ -50,7 +59,7 @@ function makeNode(name: string): any {
     },
     remove() {
       this.removed = true;
-      parent.children = parent.children.filter((child) => child !== this);
+      parent.children = parent._children.filter((child) => child.id !== this.id);
       nodes.delete(this.id);
     },
   };
@@ -164,7 +173,9 @@ staleBack.setPluginData("orbit-motion", JSON.stringify({ role: "back", sourceId:
 parent.insertChild(0, staleBack);
 settings.motion.duration = 3;
 settings.motion.fullCycle = { type: "easing", duration: 1, ease: [0.42, 0, 1, 1] };
+proxyChildReads = true;
 await onMessage({ type: "apply", settings });
+proxyChildReads = false;
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 const refreshedBack = currentBack();
 assert(refreshedBack !== firstBack, "Refresh must replace the old back copy with a fresh clone");

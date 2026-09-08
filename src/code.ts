@@ -406,7 +406,9 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
 
       const staleBackCopies = await findBackCopies(node);
       for (const staleBackCopy of staleBackCopies) {
-        if (staleBackCopy !== backCopy) tryRemoveNode(staleBackCopy);
+        // Figma can expose a node through a different proxy object on a later
+        // children read. Node ids, unlike object identity, are stable.
+        if (staleBackCopy.id !== backCopy?.id) tryRemoveNode(staleBackCopy);
       }
 
       node.setPluginData(orbitMarkerKey, JSON.stringify({
