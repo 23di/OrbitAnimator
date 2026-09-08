@@ -31,6 +31,10 @@ async function buildMain() {
 async function buildUi() {
   const result = await build({
     ...shared,
+    // The UI is inlined into ui.html. Source-map directives inside inline CSS
+    // or JS are resolved against the open Figma document URL and trigger CSP
+    // network requests (for example, ui.css.map on figma.com).
+    sourcemap: false,
     entryPoints: [resolve(root, "src/ui.tsx")],
     outfile: resolve(root, "dist/ui.js"),
     write: false,
@@ -48,6 +52,10 @@ async function buildUi() {
   const html = template
     .replace("/*__STYLES__*/", offlineCss)
     .replace("/*__SCRIPT__*/", (js?.text ?? "").replaceAll("</script>", "<\\/script>"));
+
+  if (html.includes("sourceMappingURL=")) {
+    throw new Error("Inline plugin UI must not contain source-map URLs");
+  }
 
   await writeFile(resolve(root, "dist/ui.html"), html);
 }
