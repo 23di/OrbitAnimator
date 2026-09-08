@@ -54,8 +54,18 @@ async function buildUi() {
   );
   const template = await readFile(resolve(root, "src/ui.html"), "utf8");
   const html = template
-    .replace("/*__STYLES__*/", offlineCss)
-    .replace("/*__SCRIPT__*/", (js?.text ?? "").replaceAll("</script>", "<\\/script>"));
+    // Replacement callbacks keep JavaScript sequences such as `$&` literal.
+    // Passing the bundle as a replacement string would interpret `$&` as the
+    // matched placeholder and corrupt the generated inline script.
+    .replace("/*__STYLES__*/", () => offlineCss)
+    .replace(
+      "/*__SCRIPT__*/",
+      () => (js?.text ?? "").replaceAll("</script>", "<\\/script>"),
+    );
+
+  if (html.includes("/*__STYLES__*/") || html.includes("/*__SCRIPT__*/")) {
+    throw new Error("Inline plugin UI placeholders were not fully replaced");
+  }
 
   if (html.includes("sourceMappingURL=")) {
     throw new Error("Inline plugin UI must not contain source-map URLs");
