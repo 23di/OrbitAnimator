@@ -66,7 +66,6 @@ export interface MotionSettings {
     fullCycle: DialTransition;
   };
   geometry: {
-    advanced: boolean;
     shape: GeometryShape;
     dynamicScale: boolean;
     customPath: string;

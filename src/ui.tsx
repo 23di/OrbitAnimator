@@ -25,6 +25,29 @@ import {
   type UiToPluginMessage,
 } from "./types";
 
+const advancedGeometryKeys = [
+  "xWave",
+  "yWave",
+  "depthWave",
+  "xFrequency",
+  "yFrequency",
+  "depthFrequency",
+  "xAmplitude",
+  "yAmplitude",
+  "depthAmplitude",
+  "xPhase",
+  "yPhase",
+  "depthPhase",
+  "yOffset",
+] as const satisfies ReadonlyArray<keyof MotionSettings["geometry"]>;
+type AdvancedGeometryKey = typeof advancedGeometryKeys[number];
+type UiSettings = Omit<MotionSettings, "geometry"> & {
+  geometry: Omit<MotionSettings["geometry"], AdvancedGeometryKey> & {
+    advanced: Pick<MotionSettings["geometry"], AdvancedGeometryKey>;
+  };
+};
+const advancedGeometryKeySet = new Set<string>(advancedGeometryKeys);
+
 const controls = {
   preset: {
     type: "select",
@@ -51,7 +74,6 @@ const controls = {
   },
   geometry: {
     _collapsed: true,
-    advanced: false,
     shape: {
       type: "select",
       options: [
@@ -84,34 +106,37 @@ const controls = {
     turns: [1, 0.25, 4, 0.25],
     rotation: [0, -180, 180, 1],
     orient3d: true,
-    xWave: {
-      type: "select",
-      options: [{ value: "cos", label: "Cosine" }, { value: "sin", label: "Sine" }],
-      default: "cos",
-    },
-    yWave: {
-      type: "select",
-      options: [{ value: "sin", label: "Sine" }, { value: "cos", label: "Cosine" }],
-      default: "sin",
-    },
-    depthWave: {
-      type: "select",
-      options: [{ value: "sin", label: "Sine" }, { value: "cos", label: "Cosine" }],
-      default: "sin",
-    },
-    xFrequency: [1, 0, 8, 0.25],
-    yFrequency: [1, 0, 8, 0.25],
-    depthFrequency: [1, 0, 8, 0.25],
-    xAmplitude: [1, -2, 2, 0.05],
-    yAmplitude: [1, -2, 2, 0.05],
-    depthAmplitude: [1, -2, 2, 0.05],
-    xPhase: [0, -180, 180, 1],
-    yPhase: [0, -180, 180, 1],
-    depthPhase: [0, -180, 180, 1],
-    yOffset: [0, -2, 2, 0.05],
     shapeAmount: [1, 0, 2, 0.05],
     itemSpread: [1, 0, 3, 0.05],
     depthFalloff: [1, 0.1, 4, 0.05],
+    advanced: {
+      _collapsed: true,
+      xWave: {
+        type: "select",
+        options: [{ value: "cos", label: "Cosine" }, { value: "sin", label: "Sine" }],
+        default: "cos",
+      },
+      yWave: {
+        type: "select",
+        options: [{ value: "sin", label: "Sine" }, { value: "cos", label: "Cosine" }],
+        default: "sin",
+      },
+      depthWave: {
+        type: "select",
+        options: [{ value: "sin", label: "Sine" }, { value: "cos", label: "Cosine" }],
+        default: "sin",
+      },
+      xFrequency: [1, 0, 8, 0.25],
+      yFrequency: [1, 0, 8, 0.25],
+      depthFrequency: [1, 0, 8, 0.25],
+      xAmplitude: [1, -2, 2, 0.05],
+      yAmplitude: [1, -2, 2, 0.05],
+      depthAmplitude: [1, -2, 2, 0.05],
+      xPhase: [0, -180, 180, 1],
+      yPhase: [0, -180, 180, 1],
+      depthPhase: [0, -180, 180, 1],
+      yOffset: [0, -2, 2, 0.05],
+    },
   },
   appearance: {
     _collapsed: true,
@@ -157,7 +182,7 @@ const panelId = "orbit-motion-controls-v6";
 const internalKeyframeSamples = 32;
 
 const builtInPresetSchemaKey = "orbit-built-in-preset-schema";
-const builtInPresetSchemaVersion = "6";
+const builtInPresetSchemaVersion = "7";
 let builtInPresetSchemaMigratedInSession = false;
 
 function shouldMigrateBuiltInPresets(): boolean {
@@ -182,7 +207,10 @@ function applyBuiltInPresetTuning(preset: PresetId): void {
   DialStore.updateValue(panelId, "preset", preset);
   const tuning = builtInPresetTunings[preset];
   for (const [key, value] of Object.entries(tuning.geometry ?? {})) {
-    DialStore.updateValue(panelId, `geometry.${key}`, value as number | string | boolean);
+    const path = advancedGeometryKeySet.has(key)
+      ? `geometry.advanced.${key}`
+      : `geometry.${key}`;
+    DialStore.updateValue(panelId, path, value as number | string | boolean);
   }
   for (const [key, value] of Object.entries(tuning.appearance ?? {})) {
     DialStore.updateValue(panelId, `appearance.${key}`, value as number | string | boolean);
@@ -924,9 +952,11 @@ function App() {
     onAction: (action) => {
       if (action === "other.resetSettings") resetSettings();
     },
-  }) as unknown as MotionSettings;
+  }) as unknown as UiSettings;
+  const { advanced, ...basicGeometry } = values.geometry;
   const effectiveValues: MotionSettings = {
     ...values,
+    geometry: { ...basicGeometry, ...advanced },
     motion: { ...values.motion, keyframes: internalKeyframeSamples },
   };
 
@@ -1101,32 +1131,31 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const disabled = values.geometry.dynamicScale;
-    const advanced = values.geometry.advanced;
-    const parametric = values.geometry.shape === "parametric";
-    const depthWave = parametric || values.geometry.shape === "ellipse" ||
-      values.geometry.shape === "custom-path";
+    const disabled = effectiveValues.geometry.dynamicScale;
+    const parametric = effectiveValues.geometry.shape === "parametric";
+    const depthWave = parametric || effectiveValues.geometry.shape === "ellipse" ||
+      effectiveValues.geometry.shape === "custom-path";
     const shapeAmount = ["deck", "shuffle", "tunnel", "cylinder", "racetrack", "fan", "pendulum", "vortex", "focus-deck"]
-      .includes(values.geometry.shape);
+      .includes(effectiveValues.geometry.shape);
     const itemSpread = ["deck", "shuffle", "cylinder", "fan", "pendulum", "focus-deck"]
-      .includes(values.geometry.shape);
-    const depthFalloff = values.geometry.shape === "deck" || values.geometry.shape === "focus-deck";
+      .includes(effectiveValues.geometry.shape);
+    const depthFalloff = effectiveValues.geometry.shape === "deck" || effectiveValues.geometry.shape === "focus-deck";
     document.querySelectorAll<HTMLElement>(".dialkit-select-row").forEach((row) => {
       const label = row.querySelector<HTMLElement>(".dialkit-select-label")?.textContent?.trim();
       if (label === "X Wave" || label === "Y Wave") {
-        row.classList.toggle("orbit-control-hidden", !advanced || !parametric);
+        row.classList.toggle("orbit-control-hidden", !parametric);
       } else if (label === "Depth Wave") {
-        row.classList.toggle("orbit-control-hidden", !advanced || !depthWave);
+        row.classList.toggle("orbit-control-hidden", !depthWave);
       }
     });
     document.querySelectorAll<HTMLElement>(".dialkit-slider-wrapper").forEach((wrapper) => {
       const label = wrapper.querySelector<HTMLElement>(".dialkit-slider-label")?.textContent?.trim();
       if (["X Frequency", "Y Frequency", "X Amplitude", "Y Amplitude", "X Phase", "Y Phase", "Y Offset"].includes(label ?? "")) {
-        wrapper.classList.toggle("orbit-control-hidden", !advanced || !parametric);
+        wrapper.classList.toggle("orbit-control-hidden", !parametric);
         return;
       }
       if (["Depth Frequency", "Depth Amplitude", "Depth Phase"].includes(label ?? "")) {
-        wrapper.classList.toggle("orbit-control-hidden", !advanced || !depthWave);
+        wrapper.classList.toggle("orbit-control-hidden", !depthWave);
         return;
       }
       if (label === "Shape Amount") {
@@ -1142,19 +1171,19 @@ function App() {
         return;
       }
       if (label === "Tilt") {
-        wrapper.classList.toggle("orbit-control-hidden", !values.geometry.orient3d);
+        wrapper.classList.toggle("orbit-control-hidden", !effectiveValues.geometry.orient3d);
         return;
       }
       if (label === "Circle Rotation" || label === "Orbit Rotation") {
         const labelElement = wrapper.querySelector<HTMLElement>(".dialkit-slider-label");
-        const orbitOrientation = supportsOrbitOrientation(values.geometry);
+        const orbitOrientation = supportsOrbitOrientation(effectiveValues.geometry);
         const nextLabel = orbitOrientation ? "Orbit Rotation" : "Circle Rotation";
         if (labelElement && labelElement.textContent !== nextLabel) labelElement.textContent = nextLabel;
         wrapper.querySelector<HTMLElement>('[role="slider"]')?.setAttribute("aria-label", nextLabel);
         wrapper.classList.toggle(
           "orbit-control-hidden",
           !orbitOrientation && (
-            values.geometry.shape !== "ellipse"
+            effectiveValues.geometry.shape !== "ellipse"
           ),
         );
         return;
@@ -1169,7 +1198,7 @@ function App() {
         else slider?.setAttribute("tabindex", "0");
       }
     });
-  }, [values.geometry.advanced, values.geometry.dynamicScale, values.geometry.shape, values.geometry.orient3d, pathPortalHost]);
+  }, [effectiveValues.geometry.dynamicScale, effectiveValues.geometry.shape, effectiveValues.geometry.orient3d, pathPortalHost]);
 
   useEffect(() => {
     window.onmessage = (event: MessageEvent<{ pluginMessage?: PluginToUiMessage }>) => {
