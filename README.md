@@ -1,7 +1,5 @@
 # Orbit Animator
 
-![Orbit Animator — Motion Presets for Figma Motion](assets/orbit-animator-cover.png)
-
 Figma plugin for creating editable orbit, carousel, path, and pseudo-3D animation directly in Figma Motion. Choose a preset, adjust the geometry and appearance, then generate native keyframes in a few clicks.
 
 Orbit Animator is completely free. Everything runs locally — no analytics, no tracking, and no network access.
