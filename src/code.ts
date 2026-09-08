@@ -261,22 +261,6 @@ function trySetLocked(node: MotionNode, locked: boolean): boolean {
   }
 }
 
-function isLiveNode(node: MotionNode): boolean {
-  try {
-    return !node.removed;
-  } catch {
-    return false;
-  }
-}
-
-function isLockedNode(node: MotionNode): boolean {
-  try {
-    return !node.removed && node.locked;
-  } catch {
-    return false;
-  }
-}
-
 function tryRemoveNode(node: MotionNode): void {
   try {
     if (node.removed) return;
@@ -287,22 +271,7 @@ function tryRemoveNode(node: MotionNode): void {
   }
 }
 
-async function ensureBackCopy(
-  source: MotionNode,
-): Promise<{ node: MotionNode; created: boolean }> {
-  const copies = await findBackCopies(source);
-  const liveCopies = copies.filter(isLiveNode);
-  const preferredPairId = readOrbitMarker(source)?.pairId;
-  const existing = liveCopies.find((copy) => copy.id === preferredPairId) ??
-    liveCopies.find(isLockedNode) ?? liveCopies[0];
-  if (existing && trySetLocked(existing, false)) {
-    for (const duplicate of liveCopies) {
-      if (duplicate !== existing) tryRemoveNode(duplicate);
-    }
-    if (hasSceneChildren(source.parent)) source.parent.insertChild(0, existing);
-    return { node: existing, created: false };
-  }
-
+function createBackCopy(source: MotionNode): MotionNode {
   const clone = source.clone();
   if (!isMotionNode(clone)) {
     clone.remove();
@@ -316,7 +285,7 @@ async function ensureBackCopy(
     role: "back",
     sourceId: source.id,
   } satisfies OrbitMarker));
-  return { node: clone, created: true };
+  return clone;
 }
 
 function applyTracks(
@@ -399,15 +368,18 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       ? frameCenterOffset(node)
       : { x: 0, y: 0 };
     let backCopy: MotionNode | null = null;
-    let createdBackCopy = false;
     try {
       if (settings.other.depthSplit) {
-        const ensured = await ensureBackCopy(node);
-        backCopy = ensured.node;
-        createdBackCopy = ensured.created;
-      } else {
-        const staleBackCopies = await findBackCopies(node);
-        for (const staleBackCopy of staleBackCopies) tryRemoveNode(staleBackCopy);
+        // Always build a fresh copy. Reusing a previous back layer can preserve
+        // stale node state or partially written tracks after settings change.
+        backCopy = createBackCopy(node);
+        applyTracks(
+          backCopy,
+          frames,
+          centerOffset,
+          easing,
+          (frame) => depthSplitOpacity(frame, "back"),
+        );
       }
 
       applyTracks(
@@ -422,13 +394,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       setTimelineDurations(node, settings.motion.duration, touchedTimelines);
 
       if (backCopy) {
-        applyTracks(
-          backCopy,
-          frames,
-          centerOffset,
-          easing,
-          (frame) => depthSplitOpacity(frame, "back"),
-        );
         setTimelineDurations(backCopy, settings.motion.duration, touchedTimelines);
         backCopy.setPluginData(orbitMarkerKey, JSON.stringify({
           version: 2,
@@ -439,6 +404,11 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
         trySetLocked(backCopy, true);
       }
 
+      const staleBackCopies = await findBackCopies(node);
+      for (const staleBackCopy of staleBackCopies) {
+        if (staleBackCopy !== backCopy) tryRemoveNode(staleBackCopy);
+      }
+
       node.setPluginData(orbitMarkerKey, JSON.stringify({
         version: 2,
         preset: settings.preset,
@@ -447,8 +417,7 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       } satisfies OrbitMarker));
       changed.push(node.id);
     } catch (error) {
-      if (createdBackCopy && backCopy) tryRemoveNode(backCopy);
-      else if (backCopy) trySetLocked(backCopy, true);
+      if (backCopy) tryRemoveNode(backCopy);
       failures.push(`${node.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

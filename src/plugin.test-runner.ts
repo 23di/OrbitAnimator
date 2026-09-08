@@ -140,6 +140,20 @@ assert.equal(parent.children.length, 2, "Depth Split must create exactly one bac
 const firstBack = parent.children.find((node) => node !== source);
 assert(firstBack.locked, "Back copy must be locked after applying tracks");
 
+const currentBack = () => parent.children.find((node) => node !== source);
+const assertSynchronizedPair = (back: any) => {
+  assert(back, "Depth Split must keep one back copy");
+  assert(back.locked, "The current back copy must be locked");
+  for (const field of ["TRANSLATION_X", "TRANSLATION_Y", "SCALE_X", "SCALE_Y", "ROTATION"]) {
+    assert.deepEqual(
+      back.manualKeyframeTracks[field],
+      source.manualKeyframeTracks[field],
+      `${field} must stay identical on front and back copies`,
+    );
+  }
+};
+assertSynchronizedPair(firstBack);
+
 const stalePair = makeNode("Detached stale pair");
 stalePair.setPluginData("orbit-motion", JSON.stringify({ role: "back", sourceId: source.id }));
 parent.children = parent.children.filter((node) => node !== stalePair);
@@ -152,7 +166,11 @@ settings.motion.duration = 3;
 settings.motion.fullCycle = { type: "easing", duration: 1, ease: [0.42, 0, 1, 1] };
 await onMessage({ type: "apply", settings });
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
-assert(parent.children.includes(firstBack), "Refresh must reuse the existing paired back copy");
+const refreshedBack = currentBack();
+assert(refreshedBack !== firstBack, "Refresh must replace the old back copy with a fresh clone");
+assert(firstBack.removed, "Refresh must remove the previous paired back copy");
+assert(staleBack.removed, "Refresh must remove stale unpaired back copies");
+assertSynchronizedPair(refreshedBack);
 assert.equal(timeline.duration, 3, "Refresh must shorten the Motion timeline to the new duration");
 assert.equal(
   source.manualKeyframeTracks.TRANSLATION_X.keyframes.at(-1).timelinePosition,
@@ -160,11 +178,11 @@ assert.equal(
   "Refreshed source tracks must end at the new duration",
 );
 assert.equal(
-  firstBack.manualKeyframeTracks.TRANSLATION_X.keyframes.at(-1).timelinePosition,
+  refreshedBack.manualKeyframeTracks.TRANSLATION_X.keyframes.at(-1).timelinePosition,
   3,
   "Refreshed back-copy tracks must end at the new duration",
 );
-for (const node of [source, firstBack]) {
+for (const node of [source, refreshedBack]) {
   const easing = node.manualKeyframeTracks.TRANSLATION_X.keyframes[0].easing;
   assert.equal(easing.type, "CUSTOM_CUBIC_BEZIER", "Selected easing must be written to every track");
   assert.deepEqual(
@@ -175,17 +193,28 @@ for (const node of [source, firstBack]) {
 }
 
 const timingCases = [
-  { duration: 0.4, ease: [0, 0, 1, 1] },
-  { duration: 3, ease: [0.42, 0, 1, 1] },
-  { duration: 5, ease: [0, 0, 0.58, 1] },
-  { duration: 12, ease: [0.42, 0, 0.58, 1] },
+  { duration: 0.4, ease: [0, 0, 1, 1], radiusX: 80, radiusY: 40, rotation: -135, tilt: -60 },
+  { duration: 3, ease: [0.42, 0, 1, 1], radiusX: 260, radiusY: 120, rotation: 0, tilt: 0 },
+  { duration: 5, ease: [0, 0, 0.58, 1], radiusX: 600, radiusY: 300, rotation: 75, tilt: 45 },
+  { duration: 12, ease: [0.42, 0, 0.58, 1], radiusX: 1200, radiusY: 800, rotation: 180, tilt: 90 },
 ] as const;
+let previousBack = refreshedBack;
 for (const timing of timingCases) {
   settings.motion.duration = timing.duration;
   settings.motion.fullCycle = { type: "easing", duration: 1, ease: [...timing.ease] };
+  settings.geometry.radiusX = timing.radiusX;
+  settings.geometry.radiusY = timing.radiusY;
+  settings.geometry.circleRotation = timing.rotation;
+  settings.geometry.tilt = timing.tilt;
   await onMessage({ type: "apply", settings });
   assert.equal(timeline.duration, timing.duration, "Every supported duration must update the timeline");
-  for (const node of [source, firstBack]) {
+  assert.equal(parent.children.length, 2, "Every refresh must leave exactly one back copy");
+  const back = currentBack();
+  assert(back !== previousBack, "Every refresh must replace the previous back copy");
+  assert(previousBack.removed, "Every replaced back copy must be removed");
+  assertSynchronizedPair(back);
+  previousBack = back;
+  for (const node of [source, back]) {
     const track = node.manualKeyframeTracks.TRANSLATION_X;
     assert.equal(
       track.keyframes.at(-1).timelinePosition,
@@ -199,6 +228,20 @@ for (const timing of timingCases) {
     );
   }
 }
+
+settings.other.depthSplit = false;
+await onMessage({ type: "apply", settings });
+assert.equal(parent.children.length, 1, "Disabling Depth Split must remove every back copy");
+assert(previousBack.removed, "Disabling Depth Split must remove the current back copy");
+assert(
+  source.manualKeyframeTracks.OPACITY.keyframes.some((keyframe: any) => keyframe.value.value > 0),
+  "The source must retain its normal opacity animation without Depth Split",
+);
+
+settings.other.depthSplit = true;
+await onMessage({ type: "apply", settings });
+assert.equal(parent.children.length, 2, "Re-enabling Depth Split must create exactly one fresh back copy");
+assertSynchronizedPair(currentBack());
 
 await onMessage({ type: "clear", scope: "selection" });
 assert.equal(parent.children.length, 1, "Clear must remove every linked back copy");
