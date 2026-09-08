@@ -47,7 +47,7 @@ interface OrbitMarker {
 
 figma.showUI(__html__, {
   width: pluginWidth,
-  height: 720,
+  height: 580,
   themeColors: true,
   title: "Orbit Animator",
 });
