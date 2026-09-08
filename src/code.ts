@@ -261,6 +261,22 @@ function trySetLocked(node: MotionNode, locked: boolean): boolean {
   }
 }
 
+function isLiveNode(node: MotionNode): boolean {
+  try {
+    return !node.removed;
+  } catch {
+    return false;
+  }
+}
+
+function isLockedNode(node: MotionNode): boolean {
+  try {
+    return !node.removed && node.locked;
+  } catch {
+    return false;
+  }
+}
+
 function tryRemoveNode(node: MotionNode): void {
   try {
     if (node.removed) return;
@@ -271,7 +287,31 @@ function tryRemoveNode(node: MotionNode): void {
   }
 }
 
-function createBackCopy(source: MotionNode): MotionNode {
+function clearAnimatedTracks(node: MotionNode): void {
+  for (const name of animatedFields) {
+    if (node.manualKeyframeTracks[name]) {
+      node.removeManualKeyframeTrack({ type: "PROPERTY", name });
+    }
+  }
+}
+
+async function ensureBackCopy(
+  source: MotionNode,
+): Promise<{ node: MotionNode; created: boolean }> {
+  const copies = (await findBackCopies(source)).filter(isLiveNode);
+  const preferredPairId = readOrbitMarker(source)?.pairId;
+  const existing = copies.find((copy) => copy.id === preferredPairId) ??
+    copies.find(isLockedNode) ?? copies[0];
+
+  if (existing && trySetLocked(existing, false)) {
+    for (const duplicate of copies) {
+      if (duplicate.id !== existing.id) tryRemoveNode(duplicate);
+    }
+    if (hasSceneChildren(source.parent)) source.parent.insertChild(0, existing);
+    clearAnimatedTracks(existing);
+    return { node: existing, created: false };
+  }
+
   const clone = source.clone();
   if (!isMotionNode(clone)) {
     clone.remove();
@@ -279,21 +319,17 @@ function createBackCopy(source: MotionNode): MotionNode {
   }
   clone.name = `${source.name} · Orbit Back`;
   if (hasSceneChildren(source.parent)) source.parent.insertChild(0, clone);
-  // A Figma clone inherits the source's existing manual tracks. On refresh
-  // those are front-split tracks, especially OPACITY, and must not leak into
-  // the new back layer before its complete track set is applied.
-  for (const name of animatedFields) {
-    if (clone.manualKeyframeTracks[name]) {
-      clone.removeManualKeyframeTrack({ type: "PROPERTY", name });
-    }
-  }
+  // The first Apply clones a clean source and needs no cleanup. If a back copy
+  // has to be recreated later, the source already owns front-split tracks;
+  // remove those inherited tracks before writing the new back set.
+  if (readOrbitMarker(source)) clearAnimatedTracks(clone);
   clone.setPluginData(orbitMarkerKey, JSON.stringify({
     version: 2,
     preset: "",
     role: "back",
     sourceId: source.id,
   } satisfies OrbitMarker));
-  return clone;
+  return { node: clone, created: true };
 }
 
 function applyTracks(
@@ -376,11 +412,12 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       ? frameCenterOffset(node)
       : { x: 0, y: 0 };
     let backCopy: MotionNode | null = null;
+    let createdBackCopy = false;
     try {
       if (settings.other.depthSplit) {
-        // Always build a fresh copy. Reusing a previous back layer can preserve
-        // stale node state or partially written tracks after settings change.
-        backCopy = createBackCopy(node);
+        const ensured = await ensureBackCopy(node);
+        backCopy = ensured.node;
+        createdBackCopy = ensured.created;
         applyTracks(
           backCopy,
           frames,
@@ -388,6 +425,9 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
           easing,
           (frame) => depthSplitOpacity(frame, "back"),
         );
+      } else {
+        const staleBackCopies = await findBackCopies(node);
+        for (const staleBackCopy of staleBackCopies) tryRemoveNode(staleBackCopy);
       }
 
       applyTracks(
@@ -412,13 +452,6 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
         trySetLocked(backCopy, true);
       }
 
-      const staleBackCopies = await findBackCopies(node);
-      for (const staleBackCopy of staleBackCopies) {
-        // Figma can expose a node through a different proxy object on a later
-        // children read. Node ids, unlike object identity, are stable.
-        if (staleBackCopy.id !== backCopy?.id) tryRemoveNode(staleBackCopy);
-      }
-
       node.setPluginData(orbitMarkerKey, JSON.stringify({
         version: 2,
         preset: settings.preset,
@@ -427,7 +460,8 @@ async function applyMotion(settings: MotionSettings): Promise<void> {
       } satisfies OrbitMarker));
       changed.push(node.id);
     } catch (error) {
-      if (backCopy) tryRemoveNode(backCopy);
+      if (createdBackCopy && backCopy) tryRemoveNode(backCopy);
+      else if (backCopy) trySetLocked(backCopy, true);
       failures.push(`${node.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

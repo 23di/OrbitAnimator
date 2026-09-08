@@ -154,6 +154,11 @@ assert(
 assert.equal(parent.children.length, 2, "Depth Split must create exactly one back copy");
 const firstBack = parent.children.find((node) => node !== source);
 assert(firstBack.locked, "Back copy must be locked after applying tracks");
+assert.deepEqual(
+  firstBack.removedTrackNames,
+  [],
+  "The first clean back copy must not run inherited-track cleanup",
+);
 
 const currentBack = () => parent.children.find((node) => node !== source);
 const assertSynchronizedPair = (back: any) => {
@@ -184,13 +189,13 @@ await onMessage({ type: "apply", settings });
 proxyChildReads = false;
 assert.equal(parent.children.length, 2, "Refresh must remove stale duplicate back copies");
 const refreshedBack = currentBack();
-assert(refreshedBack !== firstBack, "Refresh must replace the old back copy with a fresh clone");
+assert.equal(refreshedBack.id, firstBack.id, "Refresh must preserve the existing back-copy id");
 assert.deepEqual(
   new Set(refreshedBack.removedTrackNames),
   new Set(["TRANSLATION_X", "TRANSLATION_Y", "SCALE_X", "SCALE_Y", "ROTATION", "OPACITY"]),
   "Refresh must remove every inherited front track before writing back tracks",
 );
-assert(firstBack.removed, "Refresh must remove the previous paired back copy");
+assert(!firstBack.removed, "Refresh must keep the existing paired back copy");
 assert(staleBack.removed, "Refresh must remove stale unpaired back copies");
 assertSynchronizedPair(refreshedBack);
 assert.equal(timeline.duration, 3, "Refresh must shorten the Motion timeline to the new duration");
@@ -232,8 +237,8 @@ for (const timing of timingCases) {
   assert.equal(timeline.duration, timing.duration, "Every supported duration must update the timeline");
   assert.equal(parent.children.length, 2, "Every refresh must leave exactly one back copy");
   const back = currentBack();
-  assert(back !== previousBack, "Every refresh must replace the previous back copy");
-  assert(previousBack.removed, "Every replaced back copy must be removed");
+  assert.equal(back.id, previousBack.id, "Every refresh must preserve the paired back-copy id");
+  assert(!previousBack.removed, "Refresh must not remove the paired back copy");
   assertSynchronizedPair(back);
   previousBack = back;
   for (const node of [source, back]) {
@@ -263,7 +268,13 @@ assert(
 settings.other.depthSplit = true;
 await onMessage({ type: "apply", settings });
 assert.equal(parent.children.length, 2, "Re-enabling Depth Split must create exactly one fresh back copy");
-assertSynchronizedPair(currentBack());
+const reenabledBack = currentBack();
+assertSynchronizedPair(reenabledBack);
+assert.equal(
+  new Set(reenabledBack.removedTrackNames).size,
+  6,
+  "A recreated back copy must clear all inherited front tracks",
+);
 
 await onMessage({ type: "clear", scope: "selection" });
 assert.equal(parent.children.length, 1, "Clear must remove every linked back copy");
