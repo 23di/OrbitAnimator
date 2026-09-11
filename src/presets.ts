@@ -3,6 +3,7 @@ import type { MotionSettings, PresetId } from "./types";
 export type PresetTuning = {
   geometry: Partial<MotionSettings["geometry"]>;
   appearance: Partial<MotionSettings["appearance"]>;
+  other?: Partial<MotionSettings["other"]>;
 };
 
 const parametric = (
@@ -105,10 +106,6 @@ export const builtInPresetTunings: Record<PresetId, PresetTuning> = {
     geometry: { ...parametric({ shape: "shuffle" }), depth: 220, tilt: 0, rotation: 0 },
     appearance: { nearScale: 1.08, farScale: 0.74, farOpacity: 0.45 },
   },
-  tunnel: {
-    geometry: { ...parametric({ shape: "tunnel" }), depth: 360, tilt: 0, turns: 1, rotation: 0 },
-    appearance: { nearScale: 1.22, farScale: 0.38, farOpacity: 0.12 },
-  },
   cylinder: {
     geometry: { ...parametric({ shape: "cylinder" }), depth: 300, tilt: 0, rotation: 0 },
     appearance: { nearScale: 1.22, farScale: 0.5, farOpacity: 0.22 },
@@ -138,5 +135,10 @@ export const builtInPresetTunings: Record<PresetId, PresetTuning> = {
   "focus-swap": {
     geometry: { ...parametric({ shape: "focus-deck" }), depth: 300, tilt: 0, rotation: 0 },
     appearance: { nearScale: 1.3, farScale: 0.58, farOpacity: 0.18 },
+  },
+  "depth-blur": {
+    geometry: parametric({ orient3d: true, yAmplitude: 0.22, depth: 320, tilt: 0, rotation: 0 }),
+    appearance: { nearScale: 1.28, farScale: 0.5, farOpacity: 0.16, farBlur: 16 },
+    other: { serviceLayers: "2" },
   },
 };

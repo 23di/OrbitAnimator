@@ -43,6 +43,19 @@ export function supportsOrbitOrientation(settings: MotionSettings["geometry"]): 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+function smoothStep01(value: number): number {
+  const progress = clamp(value, 0, 1);
+  return progress * progress * (3 - 2 * progress);
+}
+
+function seamlessWrapOpacity(cycle: number, width = 0.14): number {
+  const safeWidth = Math.max(0.001, Math.min(width, 0.49));
+  return Math.min(
+    smoothStep01(cycle / safeWidth),
+    smoothStep01((1 - cycle) / safeWidth),
+  );
+}
+
 export function fitPreviewFrame(
   frameWidth: number,
   frameHeight: number,
@@ -399,6 +412,7 @@ export function pointForGeometry(
       y = Math.sin(angle * 2) * ry * 0.7 * radius;
       z = depth * Math.sin(angle);
       pathAngle = angle * 2 + Math.PI / 2;
+      opacityMultiplier *= seamlessWrapOpacity(cycle);
       break;
     }
     case "focus-deck": {
@@ -441,10 +455,7 @@ export function pointForGeometry(
       y = (custom.y - 0.5) * 2 * ry;
       pathAngle = custom.angle;
       if (!custom.closed) {
-        opacityMultiplier *= Math.min(
-          clamp(pathProgress / 0.08, 0, 1),
-          clamp((1 - pathProgress) / 0.08, 0, 1),
-        );
+        opacityMultiplier *= seamlessWrapOpacity(pathProgress);
       }
     }
   }

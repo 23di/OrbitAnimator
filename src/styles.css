@@ -176,12 +176,16 @@ main {
   height: 30px;
   background: transparent;
   color: var(--orbit-icon);
+  border-radius: 6px;
+  transition: color 150ms ease, background 150ms ease, transform 100ms ease-out;
 }
 
 .preview-pin:hover:not([aria-pressed="true"]) {
-  background: transparent;
+  background: color-mix(in srgb, var(--orbit-text) 7%, transparent);
   color: var(--orbit-icon-hover);
 }
+
+.preview-pin:active:not([aria-pressed="true"]) { transform: scale(.94); }
 
 .preview-pin svg {
   width: 16px;
@@ -198,6 +202,33 @@ main {
 .preview-pin[aria-pressed="true"]:hover {
   background: var(--orbit-bg);
 }
+
+.preview-back {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 30000;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--orbit-icon);
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease, transform 100ms ease-out;
+}
+
+.preview-back:hover {
+  background: color-mix(in srgb, var(--orbit-text) 7%, transparent);
+  color: var(--orbit-icon-hover);
+}
+
+.preview-back:active { transform: scale(.94); }
+.preview-back:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
+.preview-back svg { width: 18px; height: 18px; }
 
 .preview-grid {
   position: absolute;
@@ -250,6 +281,105 @@ main {
 
 .status.success { color: var(--figma-color-text-secondary, var(--dial-text-secondary)); }
 .status.error { color: #ff9a7a; }
+
+.gallery-page {
+  gap: 0;
+  padding: 12px 12px 34px;
+}
+
+.preset-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-gallery-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--orbit-text) 3%, transparent);
+  color: var(--orbit-text);
+  cursor: pointer;
+  text-align: left;
+  animation: gallery-card-in 280ms var(--ease-out) both;
+  animation-delay: min(calc(var(--gallery-index) * 22ms), 220ms);
+  transition: border-color 160ms ease, background 160ms ease, transform 180ms var(--ease-out);
+}
+
+.preset-gallery-card:hover {
+  border-color: color-mix(in srgb, var(--orbit-text) 25%, transparent);
+  background: color-mix(in srgb, var(--orbit-text) 6%, transparent);
+  transform: translateY(-2px);
+}
+
+.preset-gallery-card:active { transform: translateY(0) scale(.985); }
+.preset-gallery-card:focus-visible { outline: 2px solid var(--orbit-text); outline-offset: 2px; }
+
+.preset-thumbnail {
+  position: relative;
+  height: 108px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+
+.preset-thumbnail-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--orbit-grid) 1px, transparent 1px), linear-gradient(90deg, var(--orbit-grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+
+.preset-thumbnail-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  background: #ff6534;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+.preset-thumbnail-card.preview-card-1 { background: #c4ff48; }
+.preset-thumbnail-card.preview-card-2 { background: #559eff; }
+.preset-thumbnail-card.preview-card-3 { background: #bd78f0; }
+.preset-thumbnail-card.preview-card-4 { background: #e6cc72; }
+
+.preset-gallery-name {
+  display: block;
+  overflow: hidden;
+  padding: 10px 30px 11px 11px;
+  font-size: 11px;
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-gallery-arrow {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  width: 15px;
+  height: 15px;
+  color: var(--orbit-icon);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 160ms ease, transform 180ms var(--ease-out);
+}
+
+.preset-gallery-card:hover .preset-gallery-arrow,
+.preset-gallery-card:focus-visible .preset-gallery-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@keyframes gallery-card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .dial-panel {
   overflow: visible;
@@ -313,8 +443,16 @@ main {
   left: 16px;
   z-index: 90000;
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 112px 1fr;
   gap: 8px;
+}
+
+.operation-blocker {
+  position: fixed;
+  inset: 0 0 78px;
+  z-index: 89999;
+  cursor: progress;
+  background: transparent;
 }
 
 .bottom-actions .dialkit-button {
@@ -357,6 +495,24 @@ main {
 .bottom-actions .dialkit-button:last-child:disabled {
   background: var(--orbit-button-primary-disabled);
   color: var(--orbit-button-primary-disabled-text);
+}
+
+.orbit-button-progress {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.orbit-spinner {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: orbit-spin 650ms linear infinite;
 }
 
 .overlay-scrollbar {
@@ -444,6 +600,10 @@ main {
 @keyframes status-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
 }
 
 .dialkit-segmented-button.orbit-hidden-transition-mode {
@@ -544,6 +704,39 @@ main {
 
 .orbit-control-hidden {
   display: none !important;
+}
+
+.orbit-service-layers-control .dialkit-segmented {
+  padding: 2px;
+  background: color-mix(in srgb, var(--orbit-text) 5%, transparent);
+}
+
+.orbit-service-layers-control .dialkit-segmented-button {
+  min-width: 31px;
+  padding-inline: 7px;
+  border-radius: 6px;
+}
+
+.orbit-service-layers-control .dialkit-segmented-button[data-active="true"] {
+  background: var(--dial-surface-active);
+}
+
+.orbit-settings-json-portal,
+.orbit-settings-json-actions {
+  width: 160px;
+}
+
+.orbit-settings-json-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.orbit-settings-json-actions .dialkit-action-button {
+  width: auto;
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

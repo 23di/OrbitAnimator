@@ -9,6 +9,7 @@ import {
   supportsPathGeometry,
 } from "./engine";
 import { builtInPresetTunings } from "./presets";
+import { parseSettingsJson, serializeSettingsJson } from "./settings-json";
 import { presetOptions, type MotionSettings } from "./types";
 
 const settings: MotionSettings = {
@@ -56,10 +57,13 @@ const settings: MotionSettings = {
     fadeStart: 0,
     fadeEnd: 100,
     opacityCurve: "linear",
+    farBlur: 0,
+    frontShadow: 0,
     facePath: false,
   },
   other: {
     centerBeforeApply: true,
+    serviceLayers: "2",
     depthSplit: true,
     scope: "selection",
   },
@@ -79,6 +83,15 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
+function assertThrows(run: () => unknown, message: string): void {
+  try {
+    run();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
 function trajectoryDistance(left: MotionSettings, right: MotionSettings): number {
   let squaredDistance = 0;
   const samples = 64;
@@ -94,6 +107,7 @@ function trajectoryDistance(left: MotionSettings, right: MotionSettings): number
 }
 
 assert(presetOptions.length === 20, "Expected twenty presets");
+assert(!presetOptions.some((preset) => String(preset.value) === "tunnel"), "Tunnel preset must not remain in the catalog");
 assert(
   presetOptions.filter((preset) => preset.value.startsWith("orbit-3d")).length === 6,
   "Expected six 3D orbit presets",
@@ -101,6 +115,18 @@ assert(
 assert(
   !presetOptions.some((preset) => String(preset.value) === "album-wall"),
   "Album Wall must not remain in the preset list",
+);
+assert(
+  JSON.stringify(parseSettingsJson(serializeSettingsJson(settings), settings)) === JSON.stringify(settings),
+  "Settings JSON must round-trip without changing values",
+);
+assertThrows(
+  () => parseSettingsJson('{"preset":"missing"}', settings),
+  "Settings JSON must reject unrelated or incomplete objects",
+);
+assertThrows(
+  () => parseSettingsJson(serializeSettingsJson({ ...settings, preset: "missing" as never }), settings),
+  "Settings JSON must reject unsupported presets",
 );
 assert(
   trajectoryDistance(settingsForPreset("vision"), settingsForPreset("orbit-3d-eight")) > 0.2,
@@ -179,6 +205,20 @@ const waveLoop = generateNodeKeyframes({
 assert(
   waveDefaults.shape === "custom-path" && waveLoop[0].opacity === 0 && waveLoop.at(-1)!.opacity === 0,
   "Path Wave must default to an open path with hidden wraparound",
+);
+assert(
+  waveLoop[1].opacity < waveLoop[2].opacity &&
+    waveLoop.at(-2)!.opacity < waveLoop.at(-3)!.opacity,
+  "Path Wave must ease invisibly through its open-path wrap instead of popping",
+);
+
+const vortexLoop = generateNodeKeyframes(settingsForPreset("vortex"), 0, 1);
+const vortexPeakOpacity = Math.max(...vortexLoop.map((frame) => frame.opacity));
+assert(
+  vortexLoop[0].opacity === 0 && vortexLoop.at(-1)!.opacity === 0 &&
+    vortexLoop[1].opacity > 0 && vortexLoop.at(-2)!.opacity > 0 &&
+    vortexLoop[1].opacity < vortexPeakOpacity && vortexLoop.at(-2)!.opacity < vortexPeakOpacity,
+  "Vortex must fade smoothly before each item wraps back to its start",
 );
 
 const racetrackDefaults = builtInPresetTunings.racetrack.geometry;

@@ -12,13 +12,13 @@ export const presetOptions = [
   { value: "orbit-3d-sphere", label: "3D · Sphere" },
   { value: "cover-flow", label: "Cover Flow" },
   { value: "stack-shuffle", label: "Stack Shuffle" },
-  { value: "tunnel", label: "Tunnel" },
   { value: "cylinder", label: "Cylinder" },
   { value: "racetrack", label: "Racetrack" },
   { value: "fan", label: "Fan" },
   { value: "pendulum", label: "Pendulum" },
   { value: "vortex", label: "Vortex" },
   { value: "focus-swap", label: "Focus Swap" },
+  { value: "depth-blur", label: "Depth Blur" },
 ] as const;
 
 export type PresetId = (typeof presetOptions)[number]["value"];
@@ -55,6 +55,8 @@ export type DialTransition =
       duration?: number;
       ease?: [number, number, number, number] | string;
     };
+
+export type ServiceLayerCount = "0" | "2" | "3" | "4" | "5";
 
 export interface MotionSettings {
   preset: PresetId;
@@ -102,10 +104,13 @@ export interface MotionSettings {
     fadeEnd: number;
     opacityCurve: OpacityCurve;
     facePath: boolean;
+    farBlur: number;
+    frontShadow: number;
   };
   other: {
     centerBeforeApply: boolean;
-    depthSplit: boolean;
+    serviceLayers: ServiceLayerCount;
+    depthSplit?: boolean;
     scope: TargetScope;
   };
 }
@@ -115,6 +120,8 @@ export interface SelectionSummary {
   names: string[];
   types: string[];
   targets: Record<TargetScope, TargetPreview>;
+  appliedSettings: MotionSettings | null;
+  appliedPreset: PresetId | null;
 }
 
 export interface TargetPreview {

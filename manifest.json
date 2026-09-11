@@ -5,6 +5,13 @@
   "main": "dist/code.js",
   "ui": "dist/ui.html",
   "editorType": ["figma"],
+  "relaunchButtons": [
+    {
+      "command": "edit-orbit",
+      "name": "Edit Orbit animation",
+      "multipleSelection": true
+    }
+  ],
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": ["none"]

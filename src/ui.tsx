@@ -1,11 +1,10 @@
-import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { DialRoot, DialStore, useDialKit, type DialConfig } from "dialkit";
 import "dialkit/styles.css";
 import "./styles.css";
 import {
-  depthSplitOpacity,
   fitPreviewFrame,
   fitSettingsToFrame,
   generateNodeKeyframes,
@@ -14,6 +13,7 @@ import {
   supportsPathGeometry,
 } from "./engine";
 import { builtInPresetTunings } from "./presets";
+import { parseSettingsJson, serializeSettingsJson } from "./settings-json";
 import {
   presetOptions,
   type DialTransition,
@@ -156,12 +156,24 @@ const controls = {
       ],
       default: "linear",
     },
+    farBlur: [0, 0, 40, 1],
+    frontShadow: [0, 0, 40, 1],
     facePath: false,
   },
   other: {
     _collapsed: true,
     centerBeforeApply: true,
-    depthSplit: true,
+    serviceLayers: {
+      type: "select",
+      options: [
+        { value: "0", label: "Off" },
+        { value: "2", label: "2" },
+        { value: "3", label: "3" },
+        { value: "4", label: "4" },
+        { value: "5", label: "5+" },
+      ],
+      default: "2",
+    },
     scope: {
       type: "select",
       options: [
@@ -170,6 +182,10 @@ const controls = {
         { value: "deep", label: "Deep descendants" },
       ],
       default: "selection",
+    },
+    settingsJson: {
+      type: "action",
+      label: "Settings JSON",
     },
     resetSettings: {
       type: "action",
@@ -182,7 +198,7 @@ const panelId = "orbit-motion-controls-v6";
 const internalKeyframeSamples = 32;
 
 const builtInPresetSchemaKey = "orbit-built-in-preset-schema";
-const builtInPresetSchemaVersion = "7";
+const builtInPresetSchemaVersion = "11";
 let builtInPresetSchemaMigratedInSession = false;
 
 function shouldMigrateBuiltInPresets(): boolean {
@@ -214,6 +230,47 @@ function applyBuiltInPresetTuning(preset: PresetId): void {
   }
   for (const [key, value] of Object.entries(tuning.appearance ?? {})) {
     DialStore.updateValue(panelId, `appearance.${key}`, value as number | string | boolean);
+  }
+  for (const [key, value] of Object.entries(tuning.other ?? {})) {
+    DialStore.updateValue(panelId, `other.${key}`, value as number | string | boolean);
+  }
+}
+
+function applySettingsToStore(settings: MotionSettings): void {
+  DialStore.clearActivePreset(panelId);
+  DialStore.updateValue(panelId, "preset", settings.preset);
+  for (const [key, value] of Object.entries(settings.motion)) {
+    if (key !== "keyframes") DialStore.updateValue(panelId, `motion.${key}`, value as never);
+  }
+  for (const [key, value] of Object.entries(settings.geometry)) {
+    const path = advancedGeometryKeySet.has(key)
+      ? `geometry.advanced.${key}`
+      : `geometry.${key}`;
+    DialStore.updateValue(panelId, path, value as never);
+  }
+  for (const [key, value] of Object.entries(settings.appearance)) {
+    DialStore.updateValue(panelId, `appearance.${key}`, value as never);
+  }
+  for (const [key, value] of Object.entries(settings.other)) {
+    DialStore.updateValue(panelId, `other.${key}`, value as never);
+  }
+}
+
+async function writeClipboardText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) throw new Error("Clipboard access is unavailable.");
   }
 }
 
@@ -593,9 +650,11 @@ function useFigmaTheme(): "light" | "dark" {
 function OrbitPreview({
   settings,
   target,
+  onBack,
 }: {
   settings: MotionSettings;
   target: TargetPreview;
+  onBack: () => void;
 }) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewSize, setPreviewSize] = useState({ width: 328, height: 180 });
@@ -647,24 +706,30 @@ function OrbitPreview({
     const frames = generateNodeKeyframes(fittedSettings, index, itemCount);
     const width = Math.max(1, sourceSize.width * previewScale);
     const height = Math.max(1, sourceSize.height * previewScale);
-    const layers = settings.other.depthSplit ? (["back", "front"] as const) : (["single"] as const);
+    const configuredLayers = Number(settings.other.serviceLayers ?? (settings.other.depthSplit === false ? "0" : "2"));
+    const layerCount = Math.max(
+      configuredLayers,
+      settings.appearance.farBlur > 0 || settings.appearance.frontShadow > 0 ? 2 : 0,
+    );
+    const layers = layerCount > 1 ? Array.from({ length: layerCount }, (_, layer) => layer) : [-1];
     return layers.map((layer) => {
-      const layerFrames = layer === "single"
-        ? frames
-        : frames.map((frame) => ({
-            ...frame,
-            opacity: depthSplitOpacity(frame, layer),
-          }));
       const point = sampleGeneratedKeyframes(
-        layerFrames,
+        frames,
         time,
         // Full-cycle timing is already baked into generateNodeKeyframes.
         // Interpolating those samples with it again would double-apply easing.
         { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
       );
+      if (layer >= 0) {
+        const normalizedDepth = fittedSettings.geometry.depth > 0
+          ? Math.max(0, Math.min(0.999999, (point.z / fittedSettings.geometry.depth + 1) / 2))
+          : 0.5;
+        point.opacity = Math.floor(normalizedDepth * layerCount) === layer ? point.opacity : 0;
+      }
       return {
         index,
         layer,
+        layerCount,
         point,
         width,
         height,
@@ -694,7 +759,7 @@ function OrbitPreview({
     >
       <div className="preview-grid" />
       <div className="preview-origin" />
-      {cards.map(({ index, layer, point, width, height, offsetX, offsetY }) => (
+      {cards.map(({ index, layer, layerCount, point, width, height, offsetX, offsetY }) => (
         <div
           className={`preview-card preview-card-${index % 5}`}
           key={`${layer}-${index}`}
@@ -704,13 +769,30 @@ function OrbitPreview({
             marginLeft: -width / 2,
             marginTop: -height / 2,
             opacity: point.opacity,
-            zIndex: (layer === "front" ? drawCount : 0) + index,
+            filter: layer === 0 && settings.appearance.farBlur > 0
+              ? `blur(${settings.appearance.farBlur * previewScale}px)`
+              : undefined,
+            boxShadow: layer === layerCount - 1 && settings.appearance.frontShadow > 0
+              ? `0 ${settings.appearance.frontShadow * previewScale * .5}px ${settings.appearance.frontShadow * previewScale}px rgba(0,0,0,.3)`
+              : undefined,
+            zIndex: (layer < 0 ? 0 : layer * drawCount) + index,
             transform: `translate3d(${(point.x + (settings.other.centerBeforeApply ? 0 : offsetX)) * previewScale}px, ${(point.y + (settings.other.centerBeforeApply ? 0 : offsetY)) * previewScale}px, 0) rotate(${point.rotation}deg) scale(${point.scaleX}, ${point.scaleY})`,
           }}
         >
           <span>{String(index + 1).padStart(2, "0")}</span>
         </div>
       ))}
+      <button
+        className="preview-back"
+        type="button"
+        aria-label="Back to animation gallery"
+        title="Back to animations"
+        onClick={onBack}
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       <button
         className="dialkit-root dialkit-toolbar-add preview-pin"
         type="button"
@@ -730,6 +812,124 @@ function OrbitPreview({
         </svg>
       </button>
     </div>
+  );
+}
+
+function settingsForPreset(settings: MotionSettings, preset: PresetId): MotionSettings {
+  const tuning = builtInPresetTunings[preset];
+  return {
+    ...settings,
+    preset,
+    geometry: { ...settings.geometry, ...tuning.geometry },
+    appearance: { ...settings.appearance, ...tuning.appearance },
+    other: { ...settings.other, ...tuning.other },
+  };
+}
+
+function PresetThumbnail({
+  settings,
+  target,
+  time,
+}: {
+  settings: MotionSettings;
+  target: TargetPreview;
+  time: number;
+}) {
+  const itemCount = Math.max(target.count, 9);
+  const drawCount = Math.min(itemCount, 9);
+  const frameWidth = target.frameWidth || 720;
+  const frameHeight = target.frameHeight || 400;
+  const previewScale = Math.min(132 / frameWidth, 84 / frameHeight);
+  const cardFrames = useMemo(() => (
+    Array.from({ length: drawCount }, (_, index) => {
+      const source = target.items[index] ?? { width: 72, height: 92, offsetX: 0, offsetY: 0 };
+      const fitted = fitSettingsToFrame(settings, frameWidth, frameHeight, source.width, source.height);
+      return {
+        index,
+        frames: generateNodeKeyframes(fitted, index, itemCount),
+        width: Math.max(6, Math.min(18, source.width * previewScale)),
+        height: Math.max(8, Math.min(24, source.height * previewScale)),
+      };
+    })
+  ), [drawCount, frameHeight, frameWidth, itemCount, previewScale, settings, target.items]);
+  const cards = cardFrames.map(({ frames, ...card }) => ({
+    ...card,
+    point: sampleGeneratedKeyframes(
+      frames,
+      time % Math.max(settings.motion.duration, 0.1),
+      { type: "easing", duration: 1, ease: [0, 0, 1, 1] },
+    ),
+  }));
+
+  return (
+    <div className="preset-thumbnail" aria-hidden="true">
+      <div className="preset-thumbnail-grid" />
+      {cards.map(({ index, point, width, height }) => (
+        <span
+          className={`preset-thumbnail-card preview-card-${index % 5}`}
+          key={index}
+          style={{
+            width,
+            height,
+            marginLeft: -width / 2,
+            marginTop: -height / 2,
+            opacity: point.opacity,
+            filter: settings.appearance.farBlur > 0 && point.z < 0
+              ? `blur(${settings.appearance.farBlur * previewScale}px)`
+              : undefined,
+            boxShadow: settings.appearance.frontShadow > 0 && point.z >= 0
+              ? `0 ${settings.appearance.frontShadow * previewScale * .5}px ${settings.appearance.frontShadow * previewScale}px rgba(0,0,0,.3)`
+              : undefined,
+            zIndex: index,
+            transform: `translate3d(${point.x * previewScale}px, ${point.y * previewScale}px, 0) rotate(${point.rotation}deg) scale(${point.scaleX}, ${point.scaleY})`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PresetGallery({
+  settings,
+  target,
+  onSelect,
+}: {
+  settings: MotionSettings;
+  target: TargetPreview;
+  onSelect: (preset: PresetId) => void;
+}) {
+  const time = usePreviewTime(settings.motion.duration);
+  const galleryPresets = useMemo(() => (
+    presetOptions.map((preset) => ({
+      ...preset,
+      settings: settingsForPreset(settings, preset.value),
+    }))
+  ), [settings]);
+
+  return (
+    <main className="gallery-page">
+      <section className="preset-gallery" aria-label="Animation presets">
+        {galleryPresets.map((preset, index) => {
+          return (
+            <button
+              className="preset-gallery-card"
+              type="button"
+              key={preset.value}
+              onClick={() => onSelect(preset.value)}
+              style={{ "--gallery-index": index } as React.CSSProperties}
+            >
+              <PresetThumbnail settings={preset.settings} target={target} time={time} />
+              <span className="preset-gallery-name">{preset.label}</span>
+              <svg className="preset-gallery-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          );
+        })}
+      </section>
+      <OverlayScrollbar />
+      <ResizeHandle />
+    </main>
   );
 }
 
@@ -921,6 +1121,8 @@ function OverlayScrollbar() {
 
 function App() {
   const theme = useFigmaTheme();
+  const [page, setPage] = useState<"gallery" | "editor">("gallery");
+  const initialSelectionHandled = useRef(false);
   const [selection, setSelection] = useState<SelectionSummary>({
     selected: 0,
     names: [],
@@ -930,10 +1132,15 @@ function App() {
       children: { count: 0, orbitCount: 0, frameWidth: 0, frameHeight: 0, items: [] },
       deep: { count: 0, orbitCount: 0, frameWidth: 0, frameHeight: 0, items: [] },
     },
+    appliedSettings: null,
+    appliedPreset: null,
   });
   const [status, setStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [operation, setOperation] = useState<"apply" | "clear" | null>(null);
   const [easingPortalHost, setEasingPortalHost] = useState<HTMLElement | null>(null);
   const [pathPortalHost, setPathPortalHost] = useState<HTMLElement | null>(null);
+  const [serviceLayersPortalHost, setServiceLayersPortalHost] = useState<HTMLElement | null>(null);
+  const [settingsJsonPortalHost, setSettingsJsonPortalHost] = useState<HTMLElement | null>(null);
 
   const resetSettings = useCallback(() => {
     setStatus(null);
@@ -958,6 +1165,10 @@ function App() {
     ...values,
     geometry: { ...basicGeometry, ...advanced },
     motion: { ...values.motion, keyframes: internalKeyframeSamples },
+    other: {
+      ...values.other,
+      serviceLayers: values.other.serviceLayers ?? (values.other.depthSplit === false ? "0" : "2"),
+    },
   };
 
   useEffect(() => {
@@ -967,7 +1178,8 @@ function App() {
     const builtInNames = new Set(presetOptions.map((preset) => preset.label));
     const migrateBuiltIns = shouldMigrateBuiltInPresets();
     const obsoletePresets = storedPresets.filter((preset) => (
-      preset.name === "Album Wall" || (migrateBuiltIns && builtInNames.has(preset.name as typeof presetOptions[number]["label"]))
+      preset.name === "Album Wall" || preset.name === "Tunnel" ||
+      (migrateBuiltIns && builtInNames.has(preset.name as typeof presetOptions[number]["label"]))
     ));
     const removedActivePreset = obsoletePresets.some(
       (preset) => preset.id === storedActiveId,
@@ -1109,6 +1321,35 @@ function App() {
         folder.querySelector<HTMLElement>(".dialkit-folder-title")?.textContent?.trim() === "Other"
       ));
       const folderInner = otherFolder?.querySelector<HTMLElement>(".dialkit-folder-inner");
+      const serviceLayersRow = Array.from(
+        otherFolder?.querySelectorAll<HTMLElement>(".dialkit-select-row") ?? [],
+      ).find((row) => (
+        row.querySelector<HTMLElement>(".dialkit-select-label")?.textContent?.trim() ===
+        "Service Layers"
+      ));
+      if (serviceLayersRow) {
+        serviceLayersRow.classList.add("orbit-control-hidden");
+        let host = serviceLayersRow.nextElementSibling as HTMLElement | null;
+        if (!host?.classList.contains("orbit-service-layers-portal")) {
+          host = document.createElement("div");
+          host.className = "orbit-service-layers-portal";
+          serviceLayersRow.after(host);
+        }
+        setServiceLayersPortalHost((current) => current === host ? current : host);
+      }
+      const settingsJsonButton = Array.from(
+        otherFolder?.querySelectorAll<HTMLButtonElement>(".dialkit-action-button") ?? [],
+      ).find((button) => button.textContent?.trim() === "Settings JSON");
+      if (settingsJsonButton) {
+        settingsJsonButton.classList.add("orbit-control-hidden");
+        let host = settingsJsonButton.previousElementSibling as HTMLElement | null;
+        if (!host?.classList.contains("orbit-settings-json-portal")) {
+          host = document.createElement("div");
+          host.className = "orbit-settings-json-portal";
+          settingsJsonButton.before(host);
+        }
+        setSettingsJsonPortalHost((current) => current === host ? current : host);
+      }
       if (folderInner && !folderInner.querySelector(".orbit-library-links")) {
         const links = document.createElement("div");
         links.className = "orbit-library-links";
@@ -1204,8 +1445,45 @@ function App() {
     window.onmessage = (event: MessageEvent<{ pluginMessage?: PluginToUiMessage }>) => {
       const message = event.data.pluginMessage;
       if (!message) return;
-      if (message.type === "selection") setSelection(message.selection);
+      if (message.type === "selection") {
+        setSelection(message.selection);
+        if (!initialSelectionHandled.current) {
+          initialSelectionHandled.current = true;
+          if (message.selection.appliedSettings) {
+            const restored = message.selection.appliedSettings;
+            DialStore.clearActivePreset(panelId);
+            DialStore.updateValue(panelId, "preset", restored.preset);
+            for (const [key, value] of Object.entries(restored.motion)) {
+              if (key !== "keyframes") DialStore.updateValue(panelId, `motion.${key}`, value as never);
+            }
+            for (const [key, value] of Object.entries(restored.geometry)) {
+              const path = advancedGeometryKeySet.has(key)
+                ? `geometry.advanced.${key}`
+                : `geometry.${key}`;
+              DialStore.updateValue(panelId, path, value as never);
+            }
+            for (const [key, value] of Object.entries(restored.appearance)) {
+              DialStore.updateValue(panelId, `appearance.${key}`, value as never);
+            }
+            for (const [key, value] of Object.entries(restored.other)) {
+              DialStore.updateValue(panelId, `other.${key}`, value as never);
+            }
+            setPage("editor");
+          } else if (message.selection.appliedPreset) {
+            const label = presetOptions.find(
+              (option) => option.value === message.selection.appliedPreset,
+            )?.label;
+            const storedPreset = label
+              ? DialStore.getPresets(panelId).find((preset) => preset.name === label)
+              : undefined;
+            if (storedPreset) DialStore.loadPreset(panelId, storedPreset.id);
+            else applyBuiltInPresetTuning(message.selection.appliedPreset);
+            setPage("editor");
+          }
+        }
+      }
       if (message.type === "result") {
+        setOperation(null);
         setStatus(message.kind === "error" ? message : null);
       }
     };
@@ -1220,18 +1498,78 @@ function App() {
   const canApply = activeTarget.count > 0;
 
   const applyMotion = () => {
+    if (operation) return;
     setStatus(null);
+    setOperation("apply");
     send({ type: "apply", settings: effectiveValues });
   };
 
   const clearMotion = () => {
+    if (operation) return;
     setStatus(null);
+    setOperation("clear");
     send({ type: "clear", scope: effectiveValues.other.scope });
   };
 
+  const copySettingsJson = async () => {
+    try {
+      await writeClipboardText(serializeSettingsJson(effectiveValues));
+      setStatus({ kind: "success", message: "Settings JSON copied." });
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not copy settings JSON.",
+      });
+    }
+  };
+
+  const pasteSettingsJson = async () => {
+    try {
+      if (!navigator.clipboard?.readText) throw new Error("Clipboard access is unavailable in this Figma version.");
+      const text = await navigator.clipboard.readText();
+      const imported = parseSettingsJson(text, effectiveValues);
+      applySettingsToStore(imported);
+      setStatus({ kind: "success", message: "Settings JSON pasted." });
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not paste settings JSON.",
+      });
+    }
+  };
+
+  const selectPreset = (preset: PresetId) => {
+    const label = presetOptions.find((option) => option.value === preset)?.label;
+    const storedPreset = label
+      ? DialStore.getPresets(panelId).find((item) => item.name === label)
+      : undefined;
+    if (storedPreset) DialStore.loadPreset(panelId, storedPreset.id);
+    else applyBuiltInPresetTuning(preset);
+    window.scrollTo({ top: 0, behavior: "auto" });
+    setPage("editor");
+  };
+
+  if (page === "gallery") {
+    return (
+      <PresetGallery
+        settings={effectiveValues}
+        target={selection.targets[effectiveValues.other.scope]}
+        onSelect={selectPreset}
+      />
+    );
+  }
+
   return (
-    <main>
-      <OrbitPreview settings={effectiveValues} target={selection.targets[effectiveValues.other.scope]} />
+    <main aria-busy={operation !== null}>
+      {operation && <div className="operation-blocker" aria-hidden="true" />}
+      <OrbitPreview
+        settings={effectiveValues}
+        target={selection.targets[effectiveValues.other.scope]}
+        onBack={() => {
+          window.scrollTo({ top: 0, behavior: "auto" });
+          setPage("gallery");
+        }}
+      />
 
       {status && <div className={`status ${status.kind}`}>{status.message}</div>}
 
@@ -1245,24 +1583,60 @@ function App() {
           <GeometryPathEditor settings={effectiveValues} target={selection.targets[effectiveValues.other.scope]} />,
           pathPortalHost,
         )}
+        {serviceLayersPortalHost && createPortal(
+          <div className="dialkit-labeled-control orbit-service-layers-control">
+            <span className="dialkit-labeled-control-label">Service Layers</span>
+            <div className="dialkit-segmented" role="radiogroup" aria-label="Service Layers">
+              {(["0", "2", "3", "4", "5"] as const).map((value) => {
+                const active = effectiveValues.other.serviceLayers === value;
+                return (
+                  <button
+                    className="dialkit-segmented-button"
+                    data-active={String(active)}
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    tabIndex={active ? 0 : -1}
+                    onClick={() => DialStore.updateValue(panelId, "other.serviceLayers", value)}
+                  >
+                    {value === "0" ? "Off" : value === "5" ? "5+" : value}
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          serviceLayersPortalHost,
+        )}
+        {settingsJsonPortalHost && createPortal(
+          <div className="orbit-settings-json-actions" role="group" aria-label="Settings JSON">
+            <button className="dialkit-action-button" type="button" onClick={copySettingsJson}>Copy JSON</button>
+            <button className="dialkit-action-button" type="button" onClick={pasteSettingsJson}>Paste JSON</button>
+          </div>,
+          settingsJsonPortalHost,
+        )}
       </section>
 
       <div className="dialkit-root bottom-actions" data-theme={theme}>
         <button
           className="dialkit-button"
           type="button"
-          disabled={!hasOrbitMotion}
+          disabled={operation !== null || !hasOrbitMotion}
           onClick={clearMotion}
         >
-          Clear
+          {operation === "clear" ? (
+            <span className="orbit-button-progress"><span className="orbit-spinner" />Clearing…</span>
+          ) : "Clear"}
         </button>
         <button
           className="dialkit-button"
           type="button"
-          disabled={!canApply}
+          disabled={operation !== null || !canApply}
           onClick={applyMotion}
         >
-          {hasOrbitMotion ? "Refresh motion" : "Apply motion"}
+          {operation === "apply" ? (
+            <span className="orbit-button-progress"><span className="orbit-spinner" />Updating…</span>
+          ) : hasOrbitMotion ? "Refresh motion" : "Apply motion"}
         </button>
       </div>
 
